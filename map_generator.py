@@ -8,20 +8,16 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from docx import Document
 
-# Set ChromeDriver Path
-chrome_driver_path = r"C:\Users\hp\Desktop\Python\chrome-win64\chromedriver.exe"
-service = Service(chrome_driver_path)
-
-# Initialize Chrome WebDriver
+# Setup Chrome WebDriver dynamically
 options = Options()
 options.add_argument("--headless")
-options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1200x800")
-
+service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=options)
 
 # Allowed Telegram Group ID
@@ -50,9 +46,7 @@ def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
     nearest_tower = None
     for tower in tower_data:
-        tower_location = (tower['latitude'], tower['longitude'])
-        user_location = (user_lat, user_lon)
-        distance = geodesic(user_location, tower_location).kilometers
+        distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
         if distance < min_distance:
             min_distance = distance
             nearest_tower = tower
@@ -66,20 +60,18 @@ def generate_map_and_capture(user_lat, user_lon):
     m = folium.Map(location=[user_lat, user_lon], zoom_start=zoom_level,
                    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                    attr="Esri Satellite")
-
-    folium.Marker([user_lat, user_lon], tooltip=f'{user_lat}, {user_lon}',
-                  icon=folium.DivIcon(html=f'<div style="font-size:12px; color:blue;">{user_lat}, {user_lon}</div>')).add_to(m)
+    
+    folium.Marker([user_lat, user_lon], tooltip=f'{user_lat}, {user_lon}').add_to(m)
     
     if nearest_tower:
         folium.Marker([nearest_tower['latitude'], nearest_tower['longitude']],
-                      tooltip=f"Nearest Tower: {nearest_tower['name']}",
-                      icon=folium.DivIcon(html=f'<div style="font-size:12px; color:red;">{nearest_tower["name"]}</div>')).add_to(m)
+                      tooltip=f"Nearest Tower: {nearest_tower['name']}").add_to(m)
         folium.PolyLine([(user_lat, user_lon), (nearest_tower['latitude'], nearest_tower['longitude'])],
-                        color='black', weight=2, tooltip=f"Distance: {distance:.2f} km").add_to(m)
-        folium.Circle(location=[nearest_tower['latitude'], nearest_tower['longitude']],
-                      radius=500, color='green', fill=True, fill_color='green', fill_opacity=0.3, tooltip="500m Coverage (5G)").add_to(m)
-        folium.Circle(location=[nearest_tower['latitude'], nearest_tower['longitude']],
-                      radius=1000, color='yellow', fill=True, fill_color='yellow', fill_opacity=0.3, tooltip="1km Coverage (4G)").add_to(m)
+                        color='black', weight=2).add_to(m)
+        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
+                      radius=500, color='green', fill=True, fill_opacity=0.3).add_to(m)
+        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
+                      radius=1000, color='yellow', fill=True, fill_opacity=0.3).add_to(m)
     
     save_path = "C:/Users/hp/Desktop/lat_long_details/"
     os.makedirs(save_path, exist_ok=True)
@@ -91,10 +83,7 @@ def generate_map_and_capture(user_lat, user_lon):
     time.sleep(5)
     driver.save_screenshot(screenshot_path)
     
-    if not os.path.exists(screenshot_path) or os.path.getsize(screenshot_path) == 0:
-        return nearest_tower, distance, None
-    
-    return nearest_tower, distance, screenshot_path
+    return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
