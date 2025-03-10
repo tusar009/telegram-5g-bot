@@ -1,1 +1,2 @@
-worker: python bot.py
+worker: python map_generator.py
+
