@@ -33,7 +33,7 @@ def load_tower_data_from_docx(docx_path):
     return towers
 
 # Load tower data
-tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
+tower_data = load_tower_data_from_docx("/app/5G_Tower_Details.docx")
 
 def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
