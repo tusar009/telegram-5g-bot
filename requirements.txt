@@ -5,3 +5,4 @@ selenium==4.17.2
 webdriver-manager==4.0.1
 python-docx==0.8.11
 undetected-chromedriver==3.5.3
+chromium-browser
