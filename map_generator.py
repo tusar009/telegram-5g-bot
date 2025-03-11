@@ -1,16 +1,30 @@
 import os
-import folium
-import time
-from geopy.distance import geodesic
-from playwright.sync_api import sync_playwright
+import asyncio
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
+from geopy.distance import geodesic
+import folium
 from docx import Document
+from playwright.async_api import async_playwright
+import nest_asyncio
 
-# ✅ Allowed Telegram Group ID
+nest_asyncio.apply()
+
+# Load environment variables from the .env file
+load_dotenv()
+
+# Get the token from environment variables
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+if not TELEGRAM_BOT_TOKEN:
+    print("❌ ERROR: Telegram bot token not found. Set it using: set TELEGRAM_BOT_TOKEN=YOUR_TOKEN")
+    exit()
+
+# Telegram Group ID to allow access
 ALLOWED_GROUP_ID = -4767087972  # Change this to your actual group ID
 
-# ✅ Load Tower Data from Word Document
+# Load Tower Data from Word Document
 def load_tower_data_from_docx(docx_path):
     doc = Document(docx_path)
     towers = []
@@ -18,18 +32,17 @@ def load_tower_data_from_docx(docx_path):
         if para.text.startswith("Name:"):
             parts = para.text.split(", ")
             try:
-                name = parts[0].split(": ")[1]
                 lat = float(parts[1].split(": ")[1])
                 lon = float(parts[2].split(": ")[1])
-                towers.append({'name': name, 'latitude': lat, 'longitude': lon})
+                towers.append({'latitude': lat, 'longitude': lon})
             except (IndexError, ValueError):
                 continue  # Skip invalid entries
     return towers
 
-# ✅ Load Tower Data
+# Load Tower Data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 
-# ✅ Find Nearest Tower
+# Find Nearest Tower
 def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
     nearest_tower = None
@@ -40,28 +53,44 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# ✅ Generate Map & Capture Screenshot (Using Playwright)
-def generate_map_and_capture(user_lat, user_lon):
+# Generate Map & Capture Screenshot
+async def generate_map_and_capture(user_lat, user_lon):
     nearest_tower, distance = find_nearest_tower(user_lat, user_lon)
     zoom_level = 18 if distance < 1 else 12
 
-    m = folium.Map(location=[user_lat, user_lon], zoom_start=zoom_level,
-                   tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                   attr="Esri Satellite")
-    
-    # Add User Location Marker
-    folium.Marker([user_lat, user_lon], tooltip=f'User: {user_lat}, {user_lon}', icon=folium.Icon(color="blue")).add_to(m)
+    m = folium.Map(
+        location=[user_lat, user_lon],
+        zoom_start=zoom_level,
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri Satellite"
+    )
+
+    folium.Marker([user_lat, user_lon], tooltip=f'Your Location: {user_lat}, {user_lon}').add_to(m)
     
     if nearest_tower:
         folium.Marker([nearest_tower['latitude'], nearest_tower['longitude']],
-                      tooltip=f"Nearest Tower: {nearest_tower['name']}", 
-                      icon=folium.Icon(color="red")).add_to(m)
+                      tooltip=f"Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}").add_to(m)
         folium.PolyLine([(user_lat, user_lon), (nearest_tower['latitude'], nearest_tower['longitude'])],
                         color='black', weight=2).add_to(m)
+        
+        feasibility_color = "yellow" if distance <= 0.5 else "red"
+        feasibility_text = "AirFiber Feasible" if distance <= 0.5 else "Not Feasible"
+        
         folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
-                      radius=500, color='green', fill=True, fill_opacity=0.3).add_to(m)
-        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
-                      radius=1000, color='yellow', fill=True, fill_opacity=0.3).add_to(m)
+                      radius=500, color=feasibility_color, fill=True, fill_opacity=0.3).add_to(m)
+        
+        mid_lat = (user_lat + nearest_tower['latitude']) / 2
+        mid_lon = (user_lon + nearest_tower['longitude']) / 2
+        
+        folium.Marker([mid_lat, mid_lon - 0.0008],
+                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: {feasibility_color};">{feasibility_text}</div>')).add_to(m)
+        folium.Marker([mid_lat, mid_lon + 0.0008],
+                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: cyan;">📏 {distance:.2f} km</div>')).add_to(m)
+        
+        folium.Marker([user_lat - 0.0005, user_lon],
+                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: white;">📍 {user_lat}, {user_lon}</div>')).add_to(m)
+        folium.Marker([nearest_tower['latitude'] + 0.0005, nearest_tower['longitude'] ],
+                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: white;">🏗 {nearest_tower["latitude"]}, {nearest_tower["longitude"]}</div>')).add_to(m)
     
     save_path = "lat_long_details/"
     os.makedirs(save_path, exist_ok=True)
@@ -70,50 +99,68 @@ def generate_map_and_capture(user_lat, user_lon):
     
     m.save(map_file)
     
-    # ✅ Capture Screenshot using Playwright
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(f"file://{os.path.abspath(map_file)}")
-            time.sleep(3)  # Allow the map to fully load
-            page.screenshot(path=screenshot_path)
-            browser.close()
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.goto(f"file://{os.path.abspath(map_file)}", wait_until="networkidle")
+            await asyncio.sleep(3)
+            await page.screenshot(path=screenshot_path, full_page=True)
+            await browser.close()
     except Exception as e:
         print(f"Failed to capture screenshot: {e}")
         return nearest_tower, distance, None
     
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
-# ✅ Telegram Bot Message Handler
+# Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
     if update.message.chat.id != ALLOWED_GROUP_ID:
         await update.message.reply_text("You can't access this bot. Contact the owner.")
         return
     
-    try:
-        lat, lon = map(float, update.message.text.split(","))
-    except ValueError:
-        await update.message.reply_text("Send your location or enter lat,long to find nearby towers")
-        return
+    if update.message.location:
+        lat = update.message.location.latitude
+        lon = update.message.location.longitude
+    else:
+        try:
+            lat, lon = map(float, update.message.text.split(","))
+        except (ValueError, AttributeError):
+            await update.message.reply_text(
+                "Welcome to the 5G Tower Locator Bot! 📡\n"
+                "Send your location or enter coordinates as 'latitude,longitude' (e.g., `12.345,67.890`)."
+            )
+            return
     
-    await update.message.reply_text(f"Processing request... Lat: {lat}, Lon: {lon}. Please wait for your screenshot.")
-    nearest_tower, distance, screenshot_path = generate_map_and_capture(lat, lon)
-    
-    response = f"Nearest Tower: {nearest_tower['name']}\nDistance: {distance:.2f} km" if nearest_tower else "No nearby towers found."
-    await update.message.reply_text(response)
+    await update.message.reply_text(f"Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
+    nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
     
     if screenshot_path:
+        if distance <= 0.5:
+            feasibility_status = "Feasible"
+            distance_text = f"{distance * 1000:.2f} meters"
+        else:
+            feasibility_status = "Not Feasible"
+            if distance >= 1:
+                distance_text = f"{distance:.2f} km"
+            else:
+                distance_text = f"{distance * 1000:.2f} meters"
+
+        if distance <= 0.5:
+            caption = f"📡 Map View: {feasibility_status}, Distance: {distance_text}\nYellow = Feasible (≤500m)"
+        else:
+            caption = f"📡 Map View: {feasibility_status}, Distance: {distance_text}\nRed = Not Feasible (>500m)"
+
         with open(screenshot_path, 'rb') as photo:
-            await update.message.reply_photo(photo=photo, caption="Green = 5G, Yellow = 4G")
+            await update.message.reply_photo(photo=photo, caption=caption)
 
-# ✅ Bot Main Function
-def main():
-    TOKEN = os.getenv("8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE", "your-telegram-bot-token")
-    app = Application.builder().token(TOKEN).build()
+# Bot Main Function
+async def main():
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
-    print("Bot is running...")
-    app.run_polling()
+    print("✅ Bot is running...")
+    await app.run_polling()
 
+# Run the bot correctly with asyncio
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
