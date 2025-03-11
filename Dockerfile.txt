@@ -1,23 +1,42 @@
-# Use a lightweight Python image
-FROM python:3.10-slim
+# Use a Python base image
+FROM python:3.11
 
-# Install system dependencies (Chromium)
-RUN apt update && apt install -y chromium-browser && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    unzip \
+    curl \
+    gnupg \
+    libnss3 \
+    libgconf-2-4 \
+    libxss1 \
+    libappindicator3-1 \
+    fonts-liberation \
+    libasound2 \
+    xdg-utils \
+    libatk1.0-0 \
+    libgtk-3-0 \
+    --no-install-recommends
 
-# Set Chromium path environment variable
-ENV GOOGLE_CHROME_BIN="/usr/bin/chromium-browser"
+# Install Google Chrome
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set environment variable for Chrome binary
+ENV GOOGLE_CHROME_BIN="/usr/bin/google-chrome-stable"
 
 # Set working directory
 WORKDIR /app
 
-# Copy all bot files
+# Copy Python files
 COPY . /app
 
-# Install required Python packages
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Health check (ensures bot is running)
-HEALTHCHECK CMD pgrep -f "python map_generator.py" || exit 1
+# Install Python dependencies
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
 
 # Run the bot
 CMD ["python", "map_generator.py"]
