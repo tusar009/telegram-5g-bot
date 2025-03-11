@@ -104,14 +104,18 @@ async def generate_map_and_capture(user_lat, user_lon):
             browser = await p.chromium.launch()
             page = await browser.new_page()
             await page.goto(f"file://{os.path.abspath(map_file)}", wait_until="networkidle")
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)  # Increased wait time for map to load
             await page.screenshot(path=screenshot_path, full_page=True)
             await browser.close()
     except Exception as e:
         print(f"Failed to capture screenshot: {e}")
         return nearest_tower, distance, None
     
-    return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
+    if os.path.exists(screenshot_path):
+        return nearest_tower, distance, screenshot_path
+    else:
+        print(f"Screenshot not saved at {screenshot_path}")
+        return nearest_tower, distance, None
 
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
