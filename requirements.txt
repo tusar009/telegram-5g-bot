@@ -1,7 +1,6 @@
-python-telegram-bot==20.6
-folium==0.14.0
-geopy==2.3.0
-selenium==4.17.2
-webdriver-manager==4.0.1
-python-docx==0.8.11
-undetected-chromedriver==3.5.3
+selenium
+folium
+python-telegram-bot
+geopy
+webdriver-manager
+python-docx

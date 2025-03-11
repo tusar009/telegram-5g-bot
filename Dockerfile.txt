@@ -1,39 +1,37 @@
 # Use an official lightweight Python image
 FROM python:3.11-slim
 
-# Install dependencies
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    GOOGLE_CHROME_BIN="/usr/bin/chromium-browser" \
+    CHROMEDRIVER_PATH="/usr/bin/chromedriver"
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
+    chromium-browser \
+    chromium-chromedriver \
     wget \
-    curl \
     unzip \
-    xvfb \
-    libxi6 \
-    libgconf-2-4 \
-    libnss3 \
-    libxkbcommon-x11-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Google Chrome
-RUN wget -qO- https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb > /tmp/chrome.deb && \
-    apt-get update && apt-get install -y /tmp/chrome.deb && \
-    rm /tmp/chrome.deb
+# Install WebDriver (for Selenium)
+RUN wget -q "https://chromedriver.storage.googleapis.com/$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE)/chromedriver_linux64.zip" -O chromedriver.zip \
+    && unzip chromedriver.zip \
+    && mv chromedriver /usr/bin/chromedriver \
+    && chmod +x /usr/bin/chromedriver \
+    && rm chromedriver.zip
 
-# Install ChromeDriver
-RUN CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE) && \
-    wget -q "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip" -O /tmp/chromedriver.zip && \
-    unzip /tmp/chromedriver.zip -d /usr/local/bin/ && \
-    rm /tmp/chromedriver.zip
-
-# Set environment variables
-ENV DISPLAY=:99
-ENV PATH="/usr/local/bin:$PATH"
-
-# Copy project files
-WORKDIR /app
+# Copy the application files
 COPY . /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Start the application
-CMD ["python", "map_generator.py"]
+# Expose a port (if needed for webhooks)
+EXPOSE 8080
+
+# Run the bot
+CMD ["python", "bot.py"]
