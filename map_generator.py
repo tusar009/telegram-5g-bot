@@ -8,7 +8,9 @@ import folium
 from docx import Document
 from playwright.async_api import async_playwright
 import nest_asyncio
+import requests
 
+# Apply the necessary patches for asyncio compatibility
 nest_asyncio.apply()
 
 # Load environment variables from the .env file
@@ -104,18 +106,25 @@ async def generate_map_and_capture(user_lat, user_lon):
             browser = await p.chromium.launch()
             page = await browser.new_page()
             await page.goto(f"file://{os.path.abspath(map_file)}", wait_until="networkidle")
-            await asyncio.sleep(5)  # Increased wait time for map to load
+            await asyncio.sleep(3)
             await page.screenshot(path=screenshot_path, full_page=True)
             await browser.close()
     except Exception as e:
         print(f"Failed to capture screenshot: {e}")
         return nearest_tower, distance, None
     
-    if os.path.exists(screenshot_path):
-        return nearest_tower, distance, screenshot_path
+    return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
+
+# Set Webhook
+def set_webhook():
+    webhook_url = os.getenv("WEBHOOK_URL")  # e.g., https://telegram-5g-bot-production.up.railway.app/webhook
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
+    data = {"url": webhook_url}
+    response = requests.post(url, data=data)
+    if response.status_code == 200:
+        print("Webhook set successfully!")
     else:
-        print(f"Screenshot not saved at {screenshot_path}")
-        return nearest_tower, distance, None
+        print(f"Failed to set webhook: {response.text}")
 
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
@@ -163,6 +172,7 @@ async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
     print("✅ Bot is running...")
+    set_webhook()  # Set webhook when the bot starts
     await app.run_polling()
 
 # Run the bot correctly with asyncio
