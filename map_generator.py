@@ -1,13 +1,12 @@
 import os
 import folium
-import math
 import time
 from geopy.distance import geodesic
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from telegram import Update, InputFile
+from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from docx import Document
 
@@ -22,6 +21,7 @@ options.add_argument("--window-size=1200x800")
 CHROMIUM_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/chromium-browser")
 options.binary_location = CHROMIUM_PATH
 
+# Setup WebDriver
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=options)
 
@@ -47,6 +47,7 @@ def load_tower_data_from_docx(docx_path):
 # Load Tower Data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 
+# Find Nearest Tower
 def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
     nearest_tower = None
@@ -57,7 +58,7 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# Function to Generate Map and Capture Screenshot
+# Generate Map & Capture Screenshot
 def generate_map_and_capture(user_lat, user_lon):
     nearest_tower, distance = find_nearest_tower(user_lat, user_lon)
     zoom_level = 18 if distance < 1 else 12
@@ -66,16 +67,18 @@ def generate_map_and_capture(user_lat, user_lon):
                    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                    attr="Esri Satellite")
     
-    folium.Marker([user_lat, user_lon], tooltip=f'{user_lat}, {user_lon}').add_to(m)
+    # Add User Location Marker
+    folium.Marker([user_lat, user_lon], tooltip=f'User: {user_lat}, {user_lon}', icon=folium.Icon(color="blue")).add_to(m)
     
     if nearest_tower:
         folium.Marker([nearest_tower['latitude'], nearest_tower['longitude']],
-                      tooltip=f"Nearest Tower: {nearest_tower['name']}").add_to(m)
+                      tooltip=f"Nearest Tower: {nearest_tower['name']}", 
+                      icon=folium.Icon(color="red")).add_to(m)
         folium.PolyLine([(user_lat, user_lon), (nearest_tower['latitude'], nearest_tower['longitude'])],
                         color='black', weight=2).add_to(m)
-        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']]),
+        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
                       radius=500, color='green', fill=True, fill_opacity=0.3).add_to(m)
-        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']]),
+        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
                       radius=1000, color='yellow', fill=True, fill_opacity=0.3).add_to(m)
     
     save_path = "lat_long_details/"
@@ -99,10 +102,10 @@ async def handle_message(update: Update, context: CallbackContext):
     try:
         lat, lon = map(float, update.message.text.split(","))
     except ValueError:
-        await update.message.reply_text("Welcome to the 5G Tower Locator Bot! Send your location or enter lat,long to find nearby towers.")
+        await update.message.reply_text("Send your location or enter lat,long to find nearby towers.")
         return
     
-    await update.message.reply_text(f"Processing request... Lat: {lat}, Lon: {lon}.")
+    await update.message.reply_text(f"Processing... Lat: {lat}, Lon: {lon}.")
     nearest_tower, distance, screenshot_path = generate_map_and_capture(lat, lon)
     
     response = f"Nearest Tower: {nearest_tower['name']}\nDistance: {distance:.2f} km" if nearest_tower else "No nearby towers found."
@@ -114,7 +117,7 @@ async def handle_message(update: Update, context: CallbackContext):
 
 # Bot Main Function
 def main():
-    TOKEN = "8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE"
+    TOKEN = os.getenv("8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE", "your-telegram-bot-token")
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
     print("Bot is running...")
