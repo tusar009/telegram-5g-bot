@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy project files
-COPY . /app/
+COPY . .  # ✅ This ensures all files are copied properly
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install --with-deps chromium
 
 # Ensure script has execution permission
-RUN chmod +x /app/map_generator.py
+RUN chmod +x map_generator.py  # ✅ No need for `/app/`
 
 # Run the bot
-CMD ["python", "/app/map_generator.py"]
+CMD ["python", "map_generator.py"]  # ✅ Fixed path
