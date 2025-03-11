@@ -16,9 +16,9 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1200x800")
 
-# ✅ Set paths for Chromium and Chromedriver
-CHROMIUM_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/chromium")
-CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
+# ✅ Set paths for Chromium and ChromeDriver
+CHROMIUM_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/google-chrome")
+CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_BIN", "/usr/local/bin/chromedriver")
 
 options.binary_location = CHROMIUM_PATH
 service = Service(CHROMEDRIVER_PATH)
@@ -106,7 +106,7 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text("Welcome to the 5G Tower Locator Bot! Send your location or enter lat,long to find nearby towers")
         return
     
-    await update.message.reply_text(f"Your request has been received... Lat: {lat}, Lon: {lon}.Please wait for your screenshot.")
+    await update.message.reply_text(f"Your request has been received... Lat: {lat}, Lon: {lon}. Please wait for your screenshot.")
     nearest_tower, distance, screenshot_path = generate_map_and_capture(lat, lon)
     
     response = f"Nearest Tower: {nearest_tower['name']}\nDistance: {distance:.2f} km" if nearest_tower else "No nearby towers found."
