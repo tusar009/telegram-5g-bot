@@ -1,33 +1,25 @@
 import os
-import time
-import folium
-from geopy.distance import geodesic
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, CallbackContext
-from docx import Document
 
-# ✅ Configure Selenium with Railway-compatible paths
+# ✅ Set correct paths
+CHROME_PATH = "/usr/bin/google-chrome"
+CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
+
 options = Options()
+options.binary_location = CHROME_PATH
 options.add_argument("--headless")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1200x800")
 
-# ✅ Set paths for Chrome and ChromeDriver
-CHROMIUM_PATH = "/usr/bin/google-chrome"
-CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
+# ✅ Ensure Chromedriver has correct permissions
+os.chmod(CHROMEDRIVER_PATH, 0o755)
 
-# ✅ Verify Chrome and Chromedriver exist
-if not os.path.exists(CHROMIUM_PATH):
-    raise FileNotFoundError(f"Google Chrome not found at {CHROMIUM_PATH}")
-if not os.path.exists(CHROMEDRIVER_PATH):
-    raise FileNotFoundError(f"ChromeDriver not found at {CHROMEDRIVER_PATH}")
-
-options.binary_location = CHROMIUM_PATH
+# ✅ Start WebDriver with correct service
 service = Service(CHROMEDRIVER_PATH)
+driver = webdriver.Chrome(service=service, options=options)
 
 # ✅ Initialize WebDriver safely
 try:
