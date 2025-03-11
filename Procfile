@@ -1,2 +1,1 @@
-worker: python map_generator.py
-
+"web: python map_generator.py" 
