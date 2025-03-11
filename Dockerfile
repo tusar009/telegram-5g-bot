@@ -1,7 +1,7 @@
 # Use official Python image
 FROM python:3.11-slim
 
-# Install system dependencies for Selenium & Chrome
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables for Chrome
+# Set environment variables for Chrome and ChromeDriver
 ENV GOOGLE_CHROME_BIN=/usr/bin/chromium
 ENV CHROMEDRIVER_BIN=/usr/bin/chromedriver
 

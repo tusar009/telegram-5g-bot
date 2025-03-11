@@ -1,34 +1,35 @@
 import os
-import folium
 import time
+import folium
 from geopy.distance import geodesic
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from docx import Document
 
-# ✅ Correct Chrome Binary Path for Railway
-CHROME_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/google-chrome")
-CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
-
-# ✅ Setup Chromium WebDriver
+# ✅ Configure Selenium with Railway-compatible paths
 options = Options()
-options.add_argument("--headless")  # Run in headless mode
+options.add_argument("--headless")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1200x800")
-options.binary_location = CHROME_PATH  # ✅ Use correct Chrome path
 
-service = Service(CHROMEDRIVER_PATH)  # ✅ Use manually installed ChromeDriver
+# ✅ Set paths for Chromium and Chromedriver
+CHROMIUM_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/chromium")
+CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
+
+options.binary_location = CHROMIUM_PATH
+service = Service(CHROMEDRIVER_PATH)
+
+# ✅ Initialize WebDriver
 driver = webdriver.Chrome(service=service, options=options)
 
-# ✅ Allowed Telegram Group ID (Replace with actual)
-ALLOWED_GROUP_ID = -4767087972  
+# ✅ Allowed Telegram Group ID
+ALLOWED_GROUP_ID = -4767087972  # Change to your actual group ID
 
-# ✅ Load Tower Data from Word Document
+# ✅ Function to Load Tower Data from Word Document
 def load_tower_data_from_docx(docx_path):
     doc = Document(docx_path)
     towers = []
@@ -102,10 +103,10 @@ async def handle_message(update: Update, context: CallbackContext):
     try:
         lat, lon = map(float, update.message.text.split(","))
     except ValueError:
-        await update.message.reply_text("Send your location or enter lat,long to find nearby towers.")
+        await update.message.reply_text("Welcome to the 5G Tower Locator Bot! Send your location or enter lat,long to find nearby towers")
         return
     
-    await update.message.reply_text(f"Processing... Lat: {lat}, Lon: {lon}.")
+    await update.message.reply_text(f"Your request has been received... Lat: {lat}, Lon: {lon}.Please wait for your screenshot.")
     nearest_tower, distance, screenshot_path = generate_map_and_capture(lat, lon)
     
     response = f"Nearest Tower: {nearest_tower['name']}\nDistance: {distance:.2f} km" if nearest_tower else "No nearby towers found."
@@ -117,10 +118,7 @@ async def handle_message(update: Update, context: CallbackContext):
 
 # ✅ Bot Main Function
 def main():
-    TOKEN = os.getenv("8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE")  # ✅ Use environment variable for security
-    if not TOKEN:
-        raise ValueError("BOT_TOKEN is not set in environment variables.")
-
+    TOKEN = os.getenv("8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE", "your-telegram-bot-token")
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
     print("Bot is running...")
