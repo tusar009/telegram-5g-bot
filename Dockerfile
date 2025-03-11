@@ -1,19 +1,20 @@
-FROM python:3.11
+FROM python:3.11-slim
 
-# Set working directory
+# Install system dependencies
+RUN apt-get update && apt-get install -y wget unzip curl xvfb libnss3 libatk1.0-0 libcups2 libxkbcommon-x11-0 && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy all project files (ensure the destination is a directory)
-COPY . /app/
+# Copy only necessary files
+COPY map_generator.py /app/map_generator.py
+COPY requirements.txt /app/requirements.txt
 
 # Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Install Playwright with dependencies
-RUN playwright install --with-deps chromium
 
 # Ensure script has execution permission
 RUN chmod +x /app/map_generator.py
 
 # Run the bot
-CMD ["python", "/app/map_generator.py"]
+CMD ["python3", "/app/map_generator.py"]
