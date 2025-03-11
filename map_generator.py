@@ -1,31 +1,11 @@
 import os
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-
-# ✅ Set correct paths
-CHROME_PATH = "/usr/bin/google-chrome"
-CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
-
-options = Options()
-options.binary_location = CHROME_PATH
-options.add_argument("--headless")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--window-size=1200x800")
-
-# ✅ Ensure Chromedriver has correct permissions
-os.chmod(CHROMEDRIVER_PATH, 0o755)
-
-# ✅ Start WebDriver with correct service
-service = Service(CHROMEDRIVER_PATH)
-driver = webdriver.Chrome(service=service, options=options)
-
-# ✅ Initialize WebDriver safely
-try:
-    driver = webdriver.Chrome(service=service, options=options)
-except Exception as e:
-    raise RuntimeError(f"Failed to initialize Selenium WebDriver: {e}")
+import folium
+import time
+from geopy.distance import geodesic
+from playwright.sync_api import sync_playwright
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters, CallbackContext
+from docx import Document
 
 # ✅ Allowed Telegram Group ID
 ALLOWED_GROUP_ID = -4767087972  # Change this to your actual group ID
@@ -60,7 +40,7 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# ✅ Generate Map & Capture Screenshot
+# ✅ Generate Map & Capture Screenshot (Using Playwright)
 def generate_map_and_capture(user_lat, user_lon):
     nearest_tower, distance = find_nearest_tower(user_lat, user_lon)
     zoom_level = 18 if distance < 1 else 12
@@ -90,10 +70,15 @@ def generate_map_and_capture(user_lat, user_lon):
     
     m.save(map_file)
     
+    # ✅ Capture Screenshot using Playwright
     try:
-        driver.get(f"file:///{os.path.abspath(map_file)}")
-        time.sleep(5)
-        driver.save_screenshot(screenshot_path)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(f"file://{os.path.abspath(map_file)}")
+            time.sleep(3)  # Allow the map to fully load
+            page.screenshot(path=screenshot_path)
+            browser.close()
     except Exception as e:
         print(f"Failed to capture screenshot: {e}")
         return nearest_tower, distance, None

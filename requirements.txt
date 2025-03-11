@@ -1,4 +1,4 @@
-selenium
+playwright
 folium
 python-telegram-bot
 geopy

@@ -1,16 +1,7 @@
 FROM python:3.11
 
 # Install dependencies
-RUN apt-get update && apt-get install -y wget unzip
-
-# Install Google Chrome
-RUN wget -O /usr/bin/google-chrome "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
-    && chmod +x /usr/bin/google-chrome
-
-# Install ChromeDriver
-RUN wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE)/chromedriver_linux64.zip" \
-    && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
-    && chmod +x /usr/local/bin/chromedriver
+RUN apt-get update && apt-get install -y wget unzip curl && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +10,10 @@ WORKDIR /app
 COPY . .
 
 # Install Python dependencies
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright with dependencies
+RUN playwright install --with-deps
 
 # Run the bot
 CMD ["python", "map_generator.py"]
