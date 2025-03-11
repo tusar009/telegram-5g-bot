@@ -22,7 +22,7 @@ if not TELEGRAM_BOT_TOKEN:
     exit()
 
 # Telegram Group ID to allow access
-ALLOWED_GROUP_ID = -4767087972  # Change this to your actual group ID
+ALLOWED_GROUP_ID = -1002341717383  # Change this to your actual group ID
 
 # Load Tower Data from Word Document
 def load_tower_data_from_docx(docx_path):
