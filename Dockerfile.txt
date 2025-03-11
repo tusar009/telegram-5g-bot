@@ -1,0 +1,20 @@
+# Use the NixOS image for building the environment
+FROM nixos/nix
+
+# Install Chromium and other dependencies
+RUN nix-env -iA nixpkgs.chromium
+
+# Set environment variable for Chromium binary path
+ENV GOOGLE_CHROME_BIN="/usr/bin/chromium-browser"
+
+# Set working directory in the container
+WORKDIR /app
+
+# Copy your Python code into the container
+COPY . /app
+
+# Install Python dependencies
+RUN pip install -r requirements.txt
+
+# Run your Python bot when the container starts
+CMD ["python", "map_generator.py"]

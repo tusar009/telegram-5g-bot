@@ -73,9 +73,9 @@ def generate_map_and_capture(user_lat, user_lon):
                       tooltip=f"Nearest Tower: {nearest_tower['name']}").add_to(m)
         folium.PolyLine([(user_lat, user_lon), (nearest_tower['latitude'], nearest_tower['longitude'])],
                         color='black', weight=2).add_to(m)
-        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
+        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']]),
                       radius=500, color='green', fill=True, fill_opacity=0.3).add_to(m)
-        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
+        folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']]),
                       radius=1000, color='yellow', fill=True, fill_opacity=0.3).add_to(m)
     
     save_path = "lat_long_details/"
