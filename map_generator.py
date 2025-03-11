@@ -10,25 +10,25 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from docx import Document
 
-# Setup Chromium WebDriver
+# ✅ Correct Chrome Binary Path for Railway
+CHROME_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/google-chrome")
+CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
+
+# ✅ Setup Chromium WebDriver
 options = Options()
-options.add_argument("--headless")
+options.add_argument("--headless")  # Run in headless mode
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1200x800")
+options.binary_location = CHROME_PATH  # ✅ Use correct Chrome path
 
-# Use Chromium path in Railway
-CHROMIUM_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/chromium-browser")
-options.binary_location = CHROMIUM_PATH
-
-# Setup WebDriver
-service = Service(ChromeDriverManager().install())
+service = Service(CHROMEDRIVER_PATH)  # ✅ Use manually installed ChromeDriver
 driver = webdriver.Chrome(service=service, options=options)
 
-# Allowed Telegram Group ID
-ALLOWED_GROUP_ID = -4767087972  # Replace with actual group ID
+# ✅ Allowed Telegram Group ID (Replace with actual)
+ALLOWED_GROUP_ID = -4767087972  
 
-# Function to Load Tower Data from Word Document
+# ✅ Load Tower Data from Word Document
 def load_tower_data_from_docx(docx_path):
     doc = Document(docx_path)
     towers = []
@@ -44,10 +44,10 @@ def load_tower_data_from_docx(docx_path):
                 continue  # Skip invalid entries
     return towers
 
-# Load Tower Data
+# ✅ Load Tower Data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 
-# Find Nearest Tower
+# ✅ Find Nearest Tower
 def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
     nearest_tower = None
@@ -58,7 +58,7 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# Generate Map & Capture Screenshot
+# ✅ Generate Map & Capture Screenshot
 def generate_map_and_capture(user_lat, user_lon):
     nearest_tower, distance = find_nearest_tower(user_lat, user_lon)
     zoom_level = 18 if distance < 1 else 12
@@ -93,7 +93,7 @@ def generate_map_and_capture(user_lat, user_lon):
     
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
-# Telegram Bot Message Handler
+# ✅ Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
     if update.message.chat.id != ALLOWED_GROUP_ID:
         await update.message.reply_text("You can't access this bot. Contact the owner.")
@@ -115,9 +115,12 @@ async def handle_message(update: Update, context: CallbackContext):
         with open(screenshot_path, 'rb') as photo:
             await update.message.reply_photo(photo=photo, caption="Green = 5G, Yellow = 4G")
 
-# Bot Main Function
+# ✅ Bot Main Function
 def main():
-    TOKEN = os.getenv("8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE", "your-telegram-bot-token")
+    TOKEN = os.getenv("8198412536:AAF_48dVWZWAi58O7NEBC9GX_n8M52TzhwE")  # ✅ Use environment variable for security
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN is not set in environment variables.")
+
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
     print("Bot is running...")
