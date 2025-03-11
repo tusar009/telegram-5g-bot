@@ -1,42 +1,39 @@
-# Use a Python base image
-FROM python:3.11
+# Use an official lightweight Python image
+FROM python:3.11-slim
 
-# Install system dependencies
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     wget \
-    unzip \
     curl \
-    gnupg \
-    libnss3 \
+    unzip \
+    xvfb \
+    libxi6 \
     libgconf-2-4 \
-    libxss1 \
-    libappindicator3-1 \
-    fonts-liberation \
-    libasound2 \
-    xdg-utils \
-    libatk1.0-0 \
-    libgtk-3-0 \
-    --no-install-recommends
-
-# Install Google Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
+    libnss3 \
+    libxkbcommon-x11-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variable for Chrome binary
-ENV GOOGLE_CHROME_BIN="/usr/bin/google-chrome-stable"
+# Install Google Chrome
+RUN wget -qO- https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb > /tmp/chrome.deb && \
+    apt-get update && apt-get install -y /tmp/chrome.deb && \
+    rm /tmp/chrome.deb
 
-# Set working directory
+# Install ChromeDriver
+RUN CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE) && \
+    wget -q "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip" -O /tmp/chromedriver.zip && \
+    unzip /tmp/chromedriver.zip -d /usr/local/bin/ && \
+    rm /tmp/chromedriver.zip
+
+# Set environment variables
+ENV DISPLAY=:99
+ENV PATH="/usr/local/bin:$PATH"
+
+# Copy project files
 WORKDIR /app
-
-# Copy Python files
 COPY . /app
 
 # Install Python dependencies
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the bot
+# Start the application
 CMD ["python", "map_generator.py"]
