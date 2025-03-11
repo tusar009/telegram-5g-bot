@@ -1,1 +1,1 @@
-"web: python map_generator.py" 
+web: python3 map_generator.py
