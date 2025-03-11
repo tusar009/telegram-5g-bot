@@ -16,20 +16,29 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--window-size=1200x800")
 
-# ✅ Set paths for Chromium and ChromeDriver
-CHROMIUM_PATH = os.getenv("GOOGLE_CHROME_BIN", "/usr/bin/google-chrome")
-CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_BIN", "/usr/local/bin/chromedriver")
+# ✅ Set paths for Chrome and ChromeDriver
+CHROMIUM_PATH = "/usr/bin/google-chrome"
+CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
+
+# ✅ Verify Chrome and Chromedriver exist
+if not os.path.exists(CHROMIUM_PATH):
+    raise FileNotFoundError(f"Google Chrome not found at {CHROMIUM_PATH}")
+if not os.path.exists(CHROMEDRIVER_PATH):
+    raise FileNotFoundError(f"ChromeDriver not found at {CHROMEDRIVER_PATH}")
 
 options.binary_location = CHROMIUM_PATH
 service = Service(CHROMEDRIVER_PATH)
 
-# ✅ Initialize WebDriver
-driver = webdriver.Chrome(service=service, options=options)
+# ✅ Initialize WebDriver safely
+try:
+    driver = webdriver.Chrome(service=service, options=options)
+except Exception as e:
+    raise RuntimeError(f"Failed to initialize Selenium WebDriver: {e}")
 
 # ✅ Allowed Telegram Group ID
-ALLOWED_GROUP_ID = -4767087972  # Change to your actual group ID
+ALLOWED_GROUP_ID = -4767087972  # Change this to your actual group ID
 
-# ✅ Function to Load Tower Data from Word Document
+# ✅ Load Tower Data from Word Document
 def load_tower_data_from_docx(docx_path):
     doc = Document(docx_path)
     towers = []
@@ -88,9 +97,14 @@ def generate_map_and_capture(user_lat, user_lon):
     screenshot_path = os.path.join(save_path, "map_screenshot.png")
     
     m.save(map_file)
-    driver.get(f"file:///{os.path.abspath(map_file)}")
-    time.sleep(5)
-    driver.save_screenshot(screenshot_path)
+    
+    try:
+        driver.get(f"file:///{os.path.abspath(map_file)}")
+        time.sleep(5)
+        driver.save_screenshot(screenshot_path)
+    except Exception as e:
+        print(f"Failed to capture screenshot: {e}")
+        return nearest_tower, distance, None
     
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
@@ -103,10 +117,10 @@ async def handle_message(update: Update, context: CallbackContext):
     try:
         lat, lon = map(float, update.message.text.split(","))
     except ValueError:
-        await update.message.reply_text("Welcome to the 5G Tower Locator Bot! Send your location or enter lat,long to find nearby towers")
+        await update.message.reply_text("Send your location or enter lat,long to find nearby towers")
         return
     
-    await update.message.reply_text(f"Your request has been received... Lat: {lat}, Lon: {lon}. Please wait for your screenshot.")
+    await update.message.reply_text(f"Processing request... Lat: {lat}, Lon: {lon}. Please wait for your screenshot.")
     nearest_tower, distance, screenshot_path = generate_map_and_capture(lat, lon)
     
     response = f"Nearest Tower: {nearest_tower['name']}\nDistance: {distance:.2f} km" if nearest_tower else "No nearby towers found."
