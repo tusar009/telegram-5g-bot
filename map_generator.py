@@ -8,9 +8,7 @@ import folium
 from docx import Document
 from playwright.async_api import async_playwright
 import nest_asyncio
-import requests
 
-# Apply the necessary patches for asyncio compatibility
 nest_asyncio.apply()
 
 # Load environment variables from the .env file
@@ -115,17 +113,6 @@ async def generate_map_and_capture(user_lat, user_lon):
     
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
-# Set Webhook
-def set_webhook():
-    webhook_url = os.getenv("WEBHOOK_URL")  # e.g., https://telegram-5g-bot-production.up.railway.app/webhook
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
-    data = {"url": webhook_url}
-    response = requests.post(url, data=data)
-    if response.status_code == 200:
-        print("Webhook set successfully!")
-    else:
-        print(f"Failed to set webhook: {response.text}")
-
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
     if update.message.chat.id not in ALLOWED_GROUP_ID:  # Fixed this line
@@ -167,14 +154,22 @@ async def handle_message(update: Update, context: CallbackContext):
         with open(screenshot_path, 'rb') as photo:
             await update.message.reply_photo(photo=photo, caption=caption)
 
-# Bot Main Function
+# Webhook Setup
+async def set_webhook(app):
+    webhook_url = "https://yourdomain.com/YOUR_WEBHOOK_PATH"  # Replace with your actual webhook URL
+    await app.bot.set_webhook(webhook_url)
+
+# Bot Main Function (Using Webhook)
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
+    
+    # Set webhook
+    await set_webhook(app)
+    
     print("✅ Bot is running...")
-    set_webhook()  # Set webhook when the bot starts
     await app.run_polling()
 
-# Run the bot correctly with asyncio
+# Run the bot with webhook configuration
 if __name__ == "__main__":
     asyncio.run(main())
