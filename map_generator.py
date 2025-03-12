@@ -77,27 +77,20 @@ async def handle_telegram_message(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     if chat_id in ALLOWED_GROUP_IDS:
         message_text = update.message.text
-        await process_location(*map(float, message_text.split(".")), update.message.reply_text)
+        await process_location(*map(float, message_text.split(",")), update.message.reply_text)
 
 def send_whatsapp_message(response):
     print(f"📤 Sending message to WhatsApp: {response}")
     whatsapp_bot.send_message(WHATSAPP_GROUP_ID, response)
 
 async def forward_whatsapp_message(message):
-    """Handles WhatsApp messages and processes location data, with Telegram replying directly"""
+    """Handles WhatsApp messages and processes location data"""
     print(f"📩 Received WhatsApp message: {message}")
     try:
         lat, lon = map(float, message.split(","))
-        await process_location(lat, lon, lambda response: send_telegram_message(response))
+        await process_location(lat, lon, lambda response: send_whatsapp_message(response))
     except ValueError:
         print("❌ Invalid format, message ignored.")
-
-def send_telegram_message(response):
-    """Send a message to the Telegram bot itself"""
-    print(f"📤 Sending message to Telegram bot: {response}")
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    for group_id in ALLOWED_GROUP_IDS:
-        application.bot.send_message(chat_id=group_id, text=response)
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
@@ -113,7 +106,7 @@ async def main():
     whatsapp_bot.on_message(lambda msg: asyncio.create_task(forward_whatsapp_message(msg)))
     
     print("✅ Bot is running...")
-    await app.run_polling()
+    await app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
