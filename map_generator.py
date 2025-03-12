@@ -78,8 +78,9 @@ async def generate_map_and_capture(user_lat, user_lon):
         folium.PolyLine([(user_lat, user_lon), (nearest_tower['latitude'], nearest_tower['longitude'])],
                         color='black', weight=2).add_to(m)
         
-        feasibility_color = "yellow" if distance <= 0.5 else "red"
-        feasibility_text = "AirFiber Feasible" if distance <= 0.5 else "Not Feasible"
+        distance_meters = distance * 1000
+        feasibility_text = "Air-Fiber Feasible" if distance_meters < 500 else "Not Feasible"
+        feasibility_color = "yellow" if distance_meters < 500 else "red"
         
         folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
                       radius=500, color=feasibility_color, fill=True, fill_opacity=0.3).add_to(m)
@@ -89,8 +90,11 @@ async def generate_map_and_capture(user_lat, user_lon):
 
         folium.Marker([mid_lat, mid_lon - 0.0008],
                       icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: {feasibility_color};">{feasibility_text}</div>')).add_to(m)
+        
+        distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
+        
         folium.Marker([mid_lat, mid_lon + 0.0008],
-                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: cyan;">📏 {distance:.2f} km</div>')).add_to(m)
+                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: cyan;">📏 {distance_display}</div>')).add_to(m)
     
     save_path = "lat_long_details"
     os.makedirs(save_path, exist_ok=True)
@@ -138,16 +142,21 @@ async def handle_message(update: Update, context: CallbackContext):
             return
     
     await update.message.reply_text(f"🔍 Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
+
     nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
-    
+
+    distance_meters = distance * 1000
+    distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
+    feasibility_text = " (Air-Fiber Feasible)" if distance_meters < 500 else ""
+
     if screenshot_path:
         with open(screenshot_path, 'rb') as photo:
-            await update.message.reply_photo(photo=photo, caption=f"📡 Tower Distance: {distance:.2f} km")
+            await update.message.reply_photo(photo=photo, caption=f"📏 Distance: {distance_display}{feasibility_text}")
     else:
         await update.message.reply_text(
             f"📍 Your Location: {lat}, {lon}\n"
             f"🏗 Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}\n"
-            f"📏 Distance: {distance:.2f} km"
+            f"📏 Distance: {distance_display}{feasibility_text}"
         )
 
 # Bot Main Function
