@@ -130,22 +130,14 @@ async def handle_message(update: Update, context: CallbackContext):
     nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
     
     if screenshot_path:
-        distance_text = f"{distance * 1000:.2f} meters" if distance < 1 else f"{distance:.2f} km"
-        feasibility_status = "Feasible" if distance <= 0.5 else "Not Feasible"
-
-        caption = f"📡 Map View: {feasibility_status}, Distance: {distance_text}"
-        caption += "\nYellow = Feasible (≤500m)" if distance <= 0.5 else "\nRed = Not Feasible (>500m)"
-
         with open(screenshot_path, 'rb') as photo:
-            await update.message.reply_photo(photo=photo, caption=caption)
+            await update.message.reply_photo(photo=photo, caption=f"📡 Map View: Distance: {distance:.2f} km")
     else:
-        # Send fallback text if the map cannot be generated
-        fallback_message = (
+        await update.message.reply_text(
             f"📍 Your Location: {lat}, {lon}\n"
             f"🏗 Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}\n"
             f"📏 Distance: {distance:.2f} km"
         )
-        await update.message.reply_text(fallback_message)
 
 # Bot Main Function
 async def main():
