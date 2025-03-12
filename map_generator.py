@@ -11,20 +11,17 @@ import nest_asyncio
 
 nest_asyncio.apply()
 
-# Load environment variables from the .env file
+# Load environment variables
 load_dotenv()
-
-# Get the token from environment variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not TELEGRAM_BOT_TOKEN:
-    print("❌ ERROR: Telegram bot token not found. Set it using: set TELEGRAM_BOT_TOKEN=YOUR_TOKEN")
+    print("❌ ERROR: Telegram bot token not found.")
     exit()
 
-# Telegram Group ID to allow access
-ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247}  # Change this to your actual group ID
+ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247}
 
-# Load Tower Data from Word Document
+# Load Tower Data
 def load_tower_data_from_docx(docx_path):
     doc = Document(docx_path)
     towers = []
@@ -36,10 +33,9 @@ def load_tower_data_from_docx(docx_path):
                 lon = float(parts[2].split(": ")[1])
                 towers.append({'latitude': lat, 'longitude': lon})
             except (IndexError, ValueError):
-                continue  # Skip invalid entries
+                continue
     return towers
 
-# Load Tower Data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 
 # Find Nearest Tower
@@ -66,7 +62,7 @@ async def generate_map_and_capture(user_lat, user_lon):
     )
 
     folium.Marker([user_lat, user_lon], tooltip=f'Your Location: {user_lat}, {user_lon}').add_to(m)
-    
+
     if nearest_tower:
         folium.Marker([nearest_tower['latitude'], nearest_tower['longitude']],
                       tooltip=f"Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}").add_to(m)
@@ -81,42 +77,34 @@ async def generate_map_and_capture(user_lat, user_lon):
         
         mid_lat = (user_lat + nearest_tower['latitude']) / 2
         mid_lon = (user_lon + nearest_tower['longitude']) / 2
-        
+
         folium.Marker([mid_lat, mid_lon - 0.0008],
                       icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: {feasibility_color};">{feasibility_text}</div>')).add_to(m)
         folium.Marker([mid_lat, mid_lon + 0.0008],
                       icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: cyan;">📏 {distance:.2f} km</div>')).add_to(m)
-        
-        folium.Marker([user_lat - 0.0005, user_lon],
-                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: white;">📍 {user_lat}, {user_lon}</div>')).add_to(m)
-        folium.Marker([nearest_tower['latitude'] + 0.0005, nearest_tower['longitude'] ],
-                      icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: white;">🏗 {nearest_tower["latitude"]}, {nearest_tower["longitude"]}</div>')).add_to(m)
     
     save_path = "lat_long_details/"
     os.makedirs(save_path, exist_ok=True)
     map_file = os.path.join(save_path, "map.html")
     screenshot_path = os.path.join(save_path, "map_screenshot.png")
-    
+
     m.save(map_file)
-    
+    print(f"✅ Map saved successfully at {os.path.abspath(map_file)}")
+
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch()
+            browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             await page.goto(f"file://{os.path.abspath(map_file)}", wait_until="networkidle")
             await asyncio.sleep(3)
+            print(f"📸 Taking screenshot at {screenshot_path}")
             await page.screenshot(path=screenshot_path, full_page=True)
             await browser.close()
+            print(f"✅ Screenshot saved at {screenshot_path}")
     except Exception as e:
-        print(f"Failed to capture screenshot: {e}")
+        print(f"❌ Failed to capture screenshot: {e}")
         return nearest_tower, distance, None
-    
-    # Check if the screenshot was saved successfully
-    if os.path.exists(screenshot_path):
-        print(f"Screenshot saved successfully at {screenshot_path}")
-    else:
-        print(f"Screenshot failed to save at {screenshot_path}")
-    
+
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
 # Telegram Bot Message Handler
@@ -141,29 +129,23 @@ async def handle_message(update: Update, context: CallbackContext):
     await update.message.reply_text(f"Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
     nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
     
-    # Debug: Check if the screenshot was received
-    if not screenshot_path:
-        await update.message.reply_text("Sorry, there was an issue generating the map. Please try again later.")
-        return
-    
     if screenshot_path:
-        if distance <= 0.5:
-            feasibility_status = "Feasible"
-            distance_text = f"{distance * 1000:.2f} meters"
-        else:
-            feasibility_status = "Not Feasible"
-            if distance >= 1:
-                distance_text = f"{distance:.2f} km"
-            else:
-                distance_text = f"{distance * 1000:.2f} meters"
+        distance_text = f"{distance * 1000:.2f} meters" if distance < 1 else f"{distance:.2f} km"
+        feasibility_status = "Feasible" if distance <= 0.5 else "Not Feasible"
 
-        if distance <= 0.5:
-            caption = f"📡 Map View: {feasibility_status}, Distance: {distance_text}\nYellow = Feasible (≤500m)"
-        else:
-            caption = f"📡 Map View: {feasibility_status}, Distance: {distance_text}\nRed = Not Feasible (>500m)"
+        caption = f"📡 Map View: {feasibility_status}, Distance: {distance_text}"
+        caption += "\nYellow = Feasible (≤500m)" if distance <= 0.5 else "\nRed = Not Feasible (>500m)"
 
         with open(screenshot_path, 'rb') as photo:
             await update.message.reply_photo(photo=photo, caption=caption)
+    else:
+        # Send fallback text if the map cannot be generated
+        fallback_message = (
+            f"📍 Your Location: {lat}, {lon}\n"
+            f"🏗 Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}\n"
+            f"📏 Distance: {distance:.2f} km"
+        )
+        await update.message.reply_text(fallback_message)
 
 # Bot Main Function
 async def main():
@@ -172,6 +154,5 @@ async def main():
     print("✅ Bot is running...")
     await app.run_polling()
 
-# Run the bot correctly with asyncio
 if __name__ == "__main__":
     asyncio.run(main())
