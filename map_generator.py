@@ -111,6 +111,12 @@ async def generate_map_and_capture(user_lat, user_lon):
         print(f"Failed to capture screenshot: {e}")
         return nearest_tower, distance, None
     
+    # Check if the screenshot was saved successfully
+    if os.path.exists(screenshot_path):
+        print(f"Screenshot saved successfully at {screenshot_path}")
+    else:
+        print(f"Screenshot failed to save at {screenshot_path}")
+    
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
 # Telegram Bot Message Handler
@@ -134,6 +140,11 @@ async def handle_message(update: Update, context: CallbackContext):
     
     await update.message.reply_text(f"Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
     nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
+    
+    # Debug: Check if the screenshot was received
+    if not screenshot_path:
+        await update.message.reply_text("Sorry, there was an issue generating the map. Please try again later.")
+        return
     
     if screenshot_path:
         if distance <= 0.5:
