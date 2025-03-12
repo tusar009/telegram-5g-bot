@@ -19,7 +19,7 @@ if not TELEGRAM_BOT_TOKEN:
     print("❌ ERROR: Telegram bot token not found.")
     exit()
 
-ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247}
+ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343}
 
 # Load Tower Data from DOCX
 def load_tower_data_from_docx(docx_path):
@@ -79,8 +79,12 @@ async def generate_map_and_capture(user_lat, user_lon):
                         color='black', weight=2).add_to(m)
         
         distance_meters = distance * 1000
-        feasibility_text = "Air-Fiber Feasible" if distance_meters < 500 else "Not Feasible"
-        feasibility_color = "yellow" if distance_meters < 500 else "red"
+        if distance_meters < 500:
+            feasibility_text = "Air-Fiber Feasible"
+            feasibility_color = "yellow"
+        else:
+            feasibility_text = "Air-Fiber Not Feasible"
+            feasibility_color = "red"
         
         folium.Circle([nearest_tower['latitude'], nearest_tower['longitude']],
                       radius=500, color=feasibility_color, fill=True, fill_opacity=0.3).add_to(m)
@@ -147,7 +151,11 @@ async def handle_message(update: Update, context: CallbackContext):
 
     distance_meters = distance * 1000
     distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
-    feasibility_text = " (Air-Fiber Feasible)" if distance_meters < 500 else ""
+    
+    if distance_meters < 500:
+        feasibility_text = " (Air-Fiber Feasible)"
+    else:
+        feasibility_text = " (Air-Fiber Not Feasible)"
 
     if screenshot_path:
         with open(screenshot_path, 'rb') as photo:
