@@ -145,7 +145,7 @@ async def handle_message(update: Update, context: CallbackContext):
             )
             return
     
-    await update.message.reply_text(f"🔍 Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
+    await update.message.reply_text(f"🔍 Searching request for near about 5G Tower within 500 meters... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
 
     nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
 
@@ -162,14 +162,24 @@ async def handle_message(update: Update, context: CallbackContext):
             await update.message.reply_photo(photo=photo, caption=f"📏 Distance: {distance_display}{feasibility_text}")
     else:
         await update.message.reply_text(
+            f"📡 *5G Tower Locator Bot*\n"
+            f"This Bot Only Feasibility Calculates 500 Meters From Tower.\n"
             f"📍 Your Location: {lat}, {lon}\n"
             f"🏗 Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}\n"
             f"📏 Distance: {distance_display}{feasibility_text}"
         )
 
+# Start Command Handler
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text(
+        "📡 *5G Tower Locator Bot*\n"
+        "Send your location or type coordinates as: `latitude,longitude` (e.g., `12.345,67.890`)."
+    )
+
 # Bot Main Function
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
     print("✅ Bot is running...")
     await app.run_polling()
