@@ -21,10 +21,15 @@ if not TELEGRAM_BOT_TOKEN:
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247}
 
-# Load Tower Data
+# Load Tower Data from DOCX
 def load_tower_data_from_docx(docx_path):
+    if not os.path.exists(docx_path):
+        print(f"❌ ERROR: {docx_path} not found.")
+        return []
+    
     doc = Document(docx_path)
     towers = []
+    
     for para in doc.paragraphs:
         if para.text.startswith("Name:"):
             parts = para.text.split(", ")
@@ -34,6 +39,8 @@ def load_tower_data_from_docx(docx_path):
                 towers.append({'latitude': lat, 'longitude': lon})
             except (IndexError, ValueError):
                 continue
+
+    print(f"✅ Loaded {len(towers)} towers from {docx_path}")
     return towers
 
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
@@ -42,11 +49,13 @@ tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
     nearest_tower = None
+    
     for tower in tower_data:
         distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
         if distance < min_distance:
             min_distance = distance
             nearest_tower = tower
+
     return nearest_tower, min_distance
 
 # Generate Map & Capture Screenshot
@@ -83,7 +92,7 @@ async def generate_map_and_capture(user_lat, user_lon):
         folium.Marker([mid_lat, mid_lon + 0.0008],
                       icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: cyan;">📏 {distance:.2f} km</div>')).add_to(m)
     
-    save_path = "lat_long_details/"
+    save_path = "lat_long_details"
     os.makedirs(save_path, exist_ok=True)
     map_file = os.path.join(save_path, "map.html")
     screenshot_path = os.path.join(save_path, "map_screenshot.png")
@@ -95,22 +104,24 @@ async def generate_map_and_capture(user_lat, user_lon):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            await page.goto(f"file://{os.path.abspath(map_file)}", wait_until="networkidle")
-            await asyncio.sleep(3)
-            print(f"📸 Taking screenshot at {screenshot_path}")
+            await page.goto(f"file:///{os.path.abspath(map_file)}", wait_until="networkidle")
+            await asyncio.sleep(2)  # Shorter wait time
+            print(f"📸 Capturing screenshot at {screenshot_path}")
             await page.screenshot(path=screenshot_path, full_page=True)
             await browser.close()
             print(f"✅ Screenshot saved at {screenshot_path}")
     except Exception as e:
-        print(f"❌ Failed to capture screenshot: {e}")
+        print(f"❌ Screenshot failed: {e}")
         return nearest_tower, distance, None
 
     return nearest_tower, distance, screenshot_path if os.path.exists(screenshot_path) else None
 
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
-    if update.message.chat.id not in ALLOWED_GROUP_ID:
-        await update.message.reply_text("You can't access this bot. Contact the owner.")
+    user_id = update.message.chat.id
+
+    if user_id not in ALLOWED_GROUP_ID:
+        await update.message.reply_text("🚫 You are not authorized to use this bot.")
         return
     
     if update.message.location:
@@ -121,17 +132,17 @@ async def handle_message(update: Update, context: CallbackContext):
             lat, lon = map(float, update.message.text.split(","))
         except (ValueError, AttributeError):
             await update.message.reply_text(
-                "Welcome to the 5G Tower Locator Bot! 📡\n"
-                "Send your location or enter coordinates as 'latitude,longitude' (e.g., `12.345,67.890`)."
+                "📡 *5G Tower Locator Bot*\n"
+                "Send your location or type coordinates as: `latitude,longitude` (e.g., `12.345,67.890`)."
             )
             return
     
-    await update.message.reply_text(f"Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
+    await update.message.reply_text(f"🔍 Processing request... 📍 Lat: {lat}, Lon: {lon}. Please wait...")
     nearest_tower, distance, screenshot_path = await generate_map_and_capture(lat, lon)
     
     if screenshot_path:
         with open(screenshot_path, 'rb') as photo:
-            await update.message.reply_photo(photo=photo, caption=f"📡 Map View: Distance: {distance:.2f} km")
+            await update.message.reply_photo(photo=photo, caption=f"📡 Tower Distance: {distance:.2f} km")
     else:
         await update.message.reply_text(
             f"📍 Your Location: {lat}, {lon}\n"
