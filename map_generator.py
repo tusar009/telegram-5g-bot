@@ -22,7 +22,7 @@ if not TELEGRAM_BOT_TOKEN:
     exit()
 
 # Telegram Group ID to allow access
-ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247}  # Change this to your actual group IDs
+ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247}  # Change this to your actual group ID
 
 # Load Tower Data from Word Document
 def load_tower_data_from_docx(docx_path):
@@ -115,7 +115,7 @@ async def generate_map_and_capture(user_lat, user_lon):
 
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
-    if update.message.chat.id not in ALLOWED_GROUP_ID:  # Fixed this line
+    if update.message.chat.id != ALLOWED_GROUP_ID:
         await update.message.reply_text("You can't access this bot. Contact the owner.")
         return
     
@@ -154,22 +154,13 @@ async def handle_message(update: Update, context: CallbackContext):
         with open(screenshot_path, 'rb') as photo:
             await update.message.reply_photo(photo=photo, caption=caption)
 
-# Webhook Setup
-async def set_webhook(app):
-    webhook_url = "https://yourdomain.com/YOUR_WEBHOOK_PATH"  # Replace with your actual webhook URL
-    await app.bot.set_webhook(webhook_url)
-
-# Bot Main Function (Using Webhook)
+# Bot Main Function
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT | filters.LOCATION, handle_message))
-    
-    # Set webhook
-    await set_webhook(app)
-    
     print("✅ Bot is running...")
     await app.run_polling()
 
-# Run the bot with webhook configuration
+# Run the bot correctly with asyncio
 if __name__ == "__main__":
     asyncio.run(main())
