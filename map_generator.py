@@ -115,7 +115,7 @@ async def generate_map_and_capture(user_lat, user_lon):
 
 # Telegram Bot Message Handler
 async def handle_message(update: Update, context: CallbackContext):
-    if update.message.chat.id = ALLOWED_GROUP_ID:
+    if update.message.chat.id not in ALLOWED_GROUP_ID:
         await update.message.reply_text("You can't access this bot. Contact the owner.")
         return
     
