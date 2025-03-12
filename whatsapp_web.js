@@ -14,25 +14,26 @@ client.on('ready', () => {
     console.log('✅ WhatsApp Bot is ready!');
 });
 
-// Function to send messages
-function sendMessage(chatId, message) {
-    client.sendMessage(chatId, message);
-}
-
-// Listen for messages from WhatsApp group
-client.on('message', message => {
+client.on('message', async message => {
     console.log(`📩 Received from WhatsApp: ${message.body}`);
     console.log(`📌 Message from: ${message.from}`);
 
-    // Check if the message is from a group
-    if (message.from.endsWith("@g.us")) {
-        console.log(`✅ This message is from a WhatsApp group.`);
-    } else {
-        console.log(`❌ This message is from a private chat, not a group.`);
+    if (message.from === "120363392877482908@g.us") {
+        console.log("✅ Message is from the WhatsApp group, processing...");
+        client.sendMessage(message.from, "🤖 Bot is active and ready to respond!");
+    }
+});
+
+// Function to send messages from Python
+process.stdin.on('data', async (data) => {
+    try {
+        const { chat_id, message } = JSON.parse(data.toString().trim());
+        console.log(`📤 Sending message to WhatsApp group: ${chat_id}`);
+        await client.sendMessage(chat_id, message);
+        console.log("✅ Message sent successfully!");
+    } catch (error) {
+        console.error("❌ Error sending message:", error);
     }
 });
 
 client.initialize();
-
-// Export functions for Python script
-module.exports = { sendMessage };

@@ -16,12 +16,11 @@ nest_asyncio.apply()
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WHATSAPP_GROUP_ID = "120363392877482908@g.us"
+ALLOWED_GROUP_IDS = {-1002341717383, -4767087972, -4667699247, -1002448933343}  # Multiple Telegram group IDs allowed
 
 if not TELEGRAM_BOT_TOKEN:
     print("❌ ERROR: Telegram bot token not found.")
     exit()
-
-ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343}
 
 # Load WhatsApp bot
 whatsapp_bot = WhatsAppBot()
@@ -75,25 +74,30 @@ async def process_location(lat, lon, send_response):
     await send_response(response_text)
 
 async def handle_telegram_message(update: Update, context: CallbackContext):
-    user_id = update.message.chat.id
-    if user_id not in ALLOWED_GROUP_ID:
-        return
-    
-    message_text = update.message.text
-    await process_location(*map(float, message_text.split(",")), update.message.reply_text)
-
-async def forward_whatsapp_message(message):
-    """Handles WhatsApp messages and processes location data"""
-    print(f"📩 Received WhatsApp message: {message}")
-    try:
-        lat, lon = map(float, message.split(","))
-        await process_location(lat, lon, lambda response: send_whatsapp_message(response))
-    except ValueError:
-        print("❌ Invalid format, message ignored.")
+    chat_id = update.message.chat_id
+    if chat_id in ALLOWED_GROUP_IDS:
+        message_text = update.message.text
+        await process_location(*map(float, message_text.split(".")), update.message.reply_text)
 
 def send_whatsapp_message(response):
     print(f"📤 Sending message to WhatsApp: {response}")
     whatsapp_bot.send_message(WHATSAPP_GROUP_ID, response)
+
+async def forward_whatsapp_message(message):
+    """Handles WhatsApp messages and processes location data, with Telegram replying directly"""
+    print(f"📩 Received WhatsApp message: {message}")
+    try:
+        lat, lon = map(float, message.split(","))
+        await process_location(lat, lon, lambda response: send_telegram_message(response))
+    except ValueError:
+        print("❌ Invalid format, message ignored.")
+
+def send_telegram_message(response):
+    """Send a message to the Telegram bot itself"""
+    print(f"📤 Sending message to Telegram bot: {response}")
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    for group_id in ALLOWED_GROUP_IDS:
+        application.bot.send_message(chat_id=group_id, text=response)
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
