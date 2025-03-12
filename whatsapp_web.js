@@ -2,7 +2,11 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
 const client = new Client({
-    authStrategy: new LocalAuth()
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
 });
 
 client.on('qr', qr => {
@@ -18,9 +22,9 @@ client.on('message', async message => {
     console.log(`📩 Received from WhatsApp: ${message.body}`);
     console.log(`📌 Message from: ${message.from}`);
 
-    if (message.from === "120363392877482908@g.us") {
-        console.log("✅ Message is from the WhatsApp group, processing...");
-        client.sendMessage(message.from, "🤖 Bot is active and ready to respond!");
+    if (message.from.endsWith('@g.us')) {  // Ensure group messages are handled
+        console.log("✅ Message is from a WhatsApp group, processing...");
+        process.stdout.write(message.body + "\n"); // Send message to Python script
     }
 });
 
