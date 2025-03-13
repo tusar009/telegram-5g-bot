@@ -6,7 +6,6 @@ from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from geopy.distance import geodesic
 import folium
 from docx import Document
-from playwright.async_api import async_playwright
 import nest_asyncio
 from whatsapp_web import WhatsAppBot
 
@@ -57,27 +56,36 @@ def find_nearest_tower(user_lat, user_lon):
 async def process_location(lat, lon, send_response):
     print(f"🔍 Processing location: {lat}, {lon}")
     await send_response(f"🔍 Searching for the nearest 5G Tower near 📍 {lat}, {lon}...")
-    
+
     nearest_tower, distance = find_nearest_tower(lat, lon)
     distance_meters = distance * 1000
     distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
     feasibility_text = " (Air-Fiber Feasible)" if distance_meters < 500 else " (Air-Fiber Not Feasible)"
-    
+
     response_text = (
         f"📡 *5G Tower Locator Bot*\n"
         f"📍 Your Location: {lat}, {lon}\n"
         f"🏗 Tower Location: {nearest_tower['latitude']}, {nearest_tower['longitude']}\n"
         f"📏 Distance: {distance_display}{feasibility_text}"
     )
-    
+
     print(f"📤 Sending response: {response_text}")
     await send_response(response_text)
 
 async def handle_telegram_message(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
+    message_text = update.message.text
+
+    # Prevent NoneType error (ignores non-text messages)
+    if not message_text:
+        print("❌ Received a message without text, ignoring...")
+        return
+
     if chat_id in ALLOWED_GROUP_IDS:
-        message_text = update.message.text
-        await process_location(*map(float, message_text.split(",")), update.message.reply_text)
+        try:
+            await process_location(*map(float, message_text.split(",")), update.message.reply_text)
+        except ValueError:
+            await update.message.reply_text("❌ Invalid format. Send coordinates as `latitude,longitude`.")
 
 def send_whatsapp_message(response):
     print(f"📤 Sending message to WhatsApp: {response}")
@@ -101,12 +109,12 @@ async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
     app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_telegram_message))
-    
-    # Link WhatsApp message handling
-    whatsapp_bot.on_message(lambda msg: asyncio.create_task(forward_whatsapp_message(msg)))
-    
-    print("✅ Bot is running...")
-    await app.run_polling(drop_pending_updates=True)
+
+    # Set webhook instead of polling
+    WEBHOOK_URL = "https://your-railway-url/webhook"  # Change this to your actual Railway URL
+    await app.bot.set_webhook(url=WEBHOOK_URL)
+    print(f"✅ Bot is running with webhook at {WEBHOOK_URL}...")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())  # Use get_event_loop to avoid event loop conflicts
