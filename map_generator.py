@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+import requests
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
@@ -20,6 +21,7 @@ if not TELEGRAM_BOT_TOKEN:
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358}
 
+# Load 5G Tower data from DOCX
 def load_tower_data_from_docx(docx_path):
     if not os.path.exists(docx_path):
         return []
@@ -38,6 +40,7 @@ def load_tower_data_from_docx(docx_path):
 
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 
+# Find nearest tower
 def find_nearest_tower(user_lat, user_lon):
     min_distance = float('inf')
     nearest_tower = None
@@ -48,45 +51,61 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-def extract_coordinates_from_text(text):
-    google_maps_link_pattern = re.search(r'q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)', text)
-    if google_maps_link_pattern:
-        return float(google_maps_link_pattern.group(1)), float(google_maps_link_pattern.group(2))
-    
-    manual_coords_pattern = re.search(r'^(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)$', text)
-    if manual_coords_pattern:
-        return float(manual_coords_pattern.group(1)), float(manual_coords_pattern.group(2))
-    
+# Expand Google Maps short links
+def expand_google_maps_short_link(short_url):
+    try:
+        response = requests.head(short_url, allow_redirects=True)
+        return response.url  # Get the final expanded URL
+    except requests.RequestException:
+        return None
+
+# Extract coordinates from a Google Maps URL
+def extract_coordinates_from_google_maps(url):
+    expanded_url = expand_google_maps_short_link(url) if "maps.app.goo.gl" in url else url
+    if not expanded_url:
+        return None
+
+    match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)  # Extract lat/lon
+    if match:
+        return float(match.group(1)), float(match.group(2))
     return None
 
+# Handle messages (Live Location, Coordinates, Google Maps Links)
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.chat.id
-    user_name = update.message.from_user.first_name  # Get user name
+    user_name = update.message.from_user.first_name
 
     if user_id not in ALLOWED_GROUP_ID:
         return
-    
+
+    lat, lon = None, None
+
     if update.message.location:
         lat = update.message.location.latitude
         lon = update.message.location.longitude
     else:
-        extracted_coords = extract_coordinates_from_text(update.message.text)
-        if extracted_coords:
-            lat, lon = extracted_coords
-        else:
-            return  # Ignore messages without valid coordinates
+        text = update.message.text.strip()
+        if re.match(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$', text):  # Latitude,Longitude format
+            lat, lon = map(float, text.split(","))
+        elif "google.com/maps" in text or "maps.app.goo.gl" in text:  # Google Maps link
+            coords = extract_coordinates_from_google_maps(text)
+            if coords:
+                lat, lon = coords
+
+    if lat is None or lon is None:
+        return  # Ignore messages that don't contain valid coordinates
 
     await update.message.reply_text(
         f"🔍 Hi {user_name}, I have received your request.\n"
         f"📍 Location: `{lat}, {lon}`\n"
-        f"⏳ Please wait while we process your request..."
+        f"⏳ Processing your request..."
     )
-    
+
     nearest_tower, distance = find_nearest_tower(lat, lon)
     distance_meters = distance * 1000
     distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
     feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
-    
+
     await update.message.reply_text(
         f"📡 *5G Tower Locator Bot* 🌍\n"
         f"✅ *User Location*: `{lat}, {lon}`\n"
@@ -96,18 +115,21 @@ async def handle_message(update: Update, context: CallbackContext):
         f"⚡ *Note:* This bot calculates feasibility within **500 meters** of a tower."
     )
 
+# Start command
 async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.first_name
     await update.message.reply_text(
         f"👋 Hello {user_name}, welcome to the 📡 *5G Tower Locator Bot*!\n"
-        "To check feasibility, send your **live location**, paste a Google Maps link, or type coordinates as:\n"
-        "📍 `latitude,longitude` (e.g., `12.345,67.890`)."
+        "To check feasibility, send your **live location** or type coordinates as:\n"
+        "📍 `latitude,longitude` (e.g., `12.345,67.890`).\n"
+        "🔗 You can also send a **Google Maps link** (`https://maps.app.goo.gl/...`)."
     )
 
+# Run bot
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
-    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'https?://maps\.(google|app)\..+|^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_message))
+    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$') | filters.Regex(r'https://maps\.app\.goo\.gl/.*') | filters.Regex(r'https://www\.google\.com/maps/.*'), handle_message))
     print("✅ Bot is running...")
     await app.run_polling()
 
