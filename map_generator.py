@@ -19,7 +19,7 @@ if not TELEGRAM_BOT_TOKEN:
     print("❌ ERROR: Telegram bot token not found.")
     exit()
 
-ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343}
+ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358}
 
 def load_tower_data_from_docx(docx_path):
     if not os.path.exists(docx_path):
