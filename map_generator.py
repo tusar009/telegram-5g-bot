@@ -66,9 +66,11 @@ def extract_coordinates_from_google_maps(url):
         return None
 
     # Match both @lat,lon and ?q=lat,lon formats
-    match = re.search(r'[@?q=](-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)
+    match = re.search(r'[@](-?\d+\.\d+),(-?\d+\.\d+)|[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)
     if match:
-        return float(match.group(1)), float(match.group(2))
+        lat, lon = match.group(1) or match.group(3), match.group(2) or match.group(4)
+        return float(lat), float(lon)
+    
     return None
 
 # Handle messages (Live Location, Coordinates, Google Maps Links)
