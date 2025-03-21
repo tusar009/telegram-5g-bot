@@ -16,7 +16,7 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not TELEGRAM_BOT_TOKEN:
-    print("❌ ERROR: Telegram bot token not found.")
+    print("\u274c ERROR: Telegram bot token not found.")
     exit()
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358}
@@ -65,7 +65,8 @@ def extract_coordinates_from_google_maps(url):
     if not expanded_url:
         return None
 
-    match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)  # Extract lat/lon
+    # Match both @lat,lon and ?q=lat,lon formats
+    match = re.search(r'[@?q=](-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)
     if match:
         return float(match.group(1)), float(match.group(2))
     return None
@@ -96,9 +97,9 @@ async def handle_message(update: Update, context: CallbackContext):
         return  # Ignore messages that don't contain valid coordinates
 
     await update.message.reply_text(
-        f"🔍 Hi {user_name}, I have received your request.\n"
-        f"📍 Location: `{lat}, {lon}`\n"
-        f"⏳ Please wait while Aatreyee process your request..."
+        f"\U0001F50D Hi {user_name}, I have received your request.\n"
+        f"\U0001F4CD Location: `{lat}, {lon}`\n"
+        f"⏳ Please wait while Aatreyee processes your request..."
     )
     nearest_tower, distance = find_nearest_tower(lat, lon)
     distance_meters = distance * 1000
@@ -106,19 +107,19 @@ async def handle_message(update: Update, context: CallbackContext):
     feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
 
     await update.message.reply_text(
-        f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
+        f"\U0001F4E1 *Aatreyee Tower Locator Bot* \U0001F30D\n"
         f"✅ *User Location*: `{lat}, {lon}`\n"
-        f"🏗 *Nearest Airtel 5G Tower Location*: `{nearest_tower['latitude']}, {nearest_tower['longitude']}`\n"
-        f"📏 *Distance*: {distance_display}\n"
+        f"\U0001F3D7 *Nearest Airtel 5G Tower Location*: `{nearest_tower['latitude']}, {nearest_tower['longitude']}`\n"
+        f"\U0001F4CF *Distance*: {distance_display}\n"
         f"{feasibility_text}\n\n"
-        f"⚡ *Note:* As Per Policy bot calculates feasibility within **500 meters** of a tower."
+        f"⚡ *Note:* As per policy, the bot calculates feasibility within **500 meters** of a tower."
     )
 
 # Start command
 async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.first_name
     await update.message.reply_text(
-        f"👋 Hello {user_name}, welcome to the 📡 *Aatreyee Tower Locator Bot*!\n"
+        f"\U0001F44B Hello {user_name}, welcome to the \U0001F4E1 *Aatreyee Tower Locator Bot*!\n"
         "To check feasibility, send your **live location** or type coordinates as:\n"
         "📍 `latitude,longitude` (e.g., `12.345,67.890`).\n"
     )
