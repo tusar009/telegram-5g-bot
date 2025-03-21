@@ -1,12 +1,11 @@
 import os
 import asyncio
 import re
-import requests
+import aiohttp
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from geopy.distance import geodesic
-from docx import Document
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -21,84 +20,36 @@ if not TELEGRAM_BOT_TOKEN:
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358}
 
-# Load 5G Tower data from DOCX
-def load_tower_data_from_docx(docx_path):
-    if not os.path.exists(docx_path):
-        return []
-    doc = Document(docx_path)
-    towers = []
-    for para in doc.paragraphs:
-        if para.text.startswith("Name:"):
-            parts = para.text.split(", ")
-            try:
-                lat = float(parts[1].split(": ")[1])
-                lon = float(parts[2].split(": ")[1])
-                towers.append({'latitude': lat, 'longitude': lon})
-            except (IndexError, ValueError):
-                continue
-    return towers
-
-tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
-
-# Find nearest tower
-def find_nearest_tower(user_lat, user_lon):
-    min_distance = float('inf')
-    nearest_tower = None
-    for tower in tower_data:
-        distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
-        if distance < min_distance:
-            min_distance = distance
-            nearest_tower = tower
-    return nearest_tower, min_distance
-
-# Expand Google Maps short links
-def expand_google_maps_short_link(short_url):
-    try:
-        response = requests.head(short_url, allow_redirects=True)
-        return response.url  # Get the final expanded URL
-    except requests.RequestException:
-        return None
-
-# Extract coordinates from a Google Maps URL
-def extract_coordinates_from_google_maps(url):
-    expanded_url = expand_google_maps_short_link(url) if "maps.app.goo.gl" in url else url
-    if not expanded_url:
-        return None
-
-    match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)  # Extract lat/lon
+def extract_lat_lon_from_url(url):
+    """Extract latitude and longitude from Google Maps URLs"""
+    match = re.search(r'@([-]?\d+\.\d+),([-]?\d+\.\d+)', url)  # Match @lat,lon format
     if match:
         return float(match.group(1)), float(match.group(2))
+
+    match = re.search(r'q=([-]?\d+\.\d+),([-]?\d+\.\d+)', url)  # Match q=lat,lon format
+    if match:
+        return float(match.group(1)), float(match.group(2))
+
     return None
 
-# Handle messages (Live Location, Coordinates, Google Maps Links)
-async def handle_message(update: Update, context: CallbackContext):
-    user_id = update.message.chat.id
+async def get_redirected_url(url):
+    """Fetch the final redirected URL from a shortened Google Maps link"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, allow_redirects=True) as response:
+                return str(response.url)  # Get the final redirected URL
+    except Exception as e:
+        print(f"Error fetching redirected URL: {e}")
+        return None
+
+async def process_location(update: Update, context: CallbackContext, lat: float, lon: float):
+    """Process the location and send the nearest 5G tower details"""
     user_name = update.message.from_user.first_name
-
-    if user_id not in ALLOWED_GROUP_ID:
-        return
-
-    lat, lon = None, None
-
-    if update.message.location:
-        lat = update.message.location.latitude
-        lon = update.message.location.longitude
-    else:
-        text = update.message.text.strip()
-        if re.match(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$', text):  # Latitude,Longitude format
-            lat, lon = map(float, text.split(","))
-        elif "google.com/maps" in text or "maps.app.goo.gl" in text:  # Google Maps link
-            coords = extract_coordinates_from_google_maps(text)
-            if coords:
-                lat, lon = coords
-
-    if lat is None or lon is None:
-        return  # Ignore messages that don't contain valid coordinates
 
     await update.message.reply_text(
         f"🔍 Hi {user_name}, I have received your request.\n"
         f"📍 Location: `{lat}, {lon}`\n"
-        f"⏳ Processing your request..."
+        f"⏳ Please wait while we process your request..."
     )
 
     nearest_tower, distance = find_nearest_tower(lat, lon)
@@ -115,21 +66,68 @@ async def handle_message(update: Update, context: CallbackContext):
         f"⚡ *Note:* This bot calculates feasibility within **500 meters** of a tower."
     )
 
-# Start command
+async def handle_message(update: Update, context: CallbackContext):
+    user_id = update.message.chat.id
+    if user_id not in ALLOWED_GROUP_ID:
+        return
+
+    message_text = update.message.text.strip()
+
+    # 📍 Case 1: User sends a Google Maps Short Link
+    if "maps.app.goo.gl" in message_text:
+        final_url = await get_redirected_url(message_text)
+        if final_url:
+            coords = extract_lat_lon_from_url(final_url)
+            if coords:
+                await process_location(update, context, coords[0], coords[1])
+                return
+
+    # 📍 Case 2: User sends a Google Maps Direct Link
+    elif "www.google.com/maps" in message_text:
+        coords = extract_lat_lon_from_url(message_text)
+        if coords:
+            await process_location(update, context, coords[0], coords[1])
+            return
+
+    # 📍 Case 3: User sends Manual Lat,Long (12.345,67.890)
+    try:
+        lat, lon = map(float, message_text.split(","))
+        await process_location(update, context, lat, lon)
+        return
+    except (ValueError, AttributeError):
+        pass
+
+    # Ignore other messages that do not contain valid location info
+
+async def handle_location(update: Update, context: CallbackContext):
+    """Handle live location shared via Telegram"""
+    user_id = update.message.chat.id
+    if user_id not in ALLOWED_GROUP_ID:
+        return
+
+    lat = update.message.location.latitude
+    lon = update.message.location.longitude
+    await process_location(update, context, lat, lon)
+
 async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.first_name
     await update.message.reply_text(
-        f"👋 Hello {user_name}, welcome to the 📡 *5G Tower Locator Bot*!\n"
-        "To check feasibility, send your **live location** or type coordinates as:\n"
-        "📍 `latitude,longitude` (e.g., `12.345,67.890`).\n"
-        "🔗 You can also send a **Google Maps link** (`https://maps.app.goo.gl/...`)."
+        f"👋 Hello {user_name}, welcome to the 📡 *5G Tower Locator Bot*!\n\n"
+        "You can send your location in three ways:\n"
+        "✅ *Live Location* (shared via Telegram)\n"
+        "✅ *Manual Coordinates* (`12.345,67.890`)\n"
+        "✅ *Google Maps Link* (`https://maps.app.goo.gl/...` or `https://www.google.com/maps/...`)\n\n"
+        "No matter how you provide your location, I will:\n"
+        "🔹 Extract the coordinates 📍\n"
+        "🔹 Find the nearest 5G tower 📡\n"
+        "🔹 Check feasibility within 500 meters 🏗\n"
     )
 
-# Run bot
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
-    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$') | filters.Regex(r'https://maps\.app\.goo\.gl/.*') | filters.Regex(r'https://www\.google\.com/maps/.*'), handle_message))
+    app.add_handler(MessageHandler(filters.LOCATION, handle_location))
+    app.add_handler(MessageHandler(filters.TEXT, handle_message))
     print("✅ Bot is running...")
     await app.run_polling()
 
