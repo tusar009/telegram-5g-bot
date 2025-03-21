@@ -1,12 +1,11 @@
 import os
 import asyncio
+import re
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from geopy.distance import geodesic
-import folium
 from docx import Document
-from playwright.async_api import async_playwright
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -49,6 +48,17 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
+def extract_coordinates_from_text(text):
+    google_maps_link_pattern = re.search(r'q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)', text)
+    if google_maps_link_pattern:
+        return float(google_maps_link_pattern.group(1)), float(google_maps_link_pattern.group(2))
+    
+    manual_coords_pattern = re.search(r'^(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)$', text)
+    if manual_coords_pattern:
+        return float(manual_coords_pattern.group(1)), float(manual_coords_pattern.group(2))
+    
+    return None
+
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.chat.id
     user_name = update.message.from_user.first_name  # Get user name
@@ -60,10 +70,11 @@ async def handle_message(update: Update, context: CallbackContext):
         lat = update.message.location.latitude
         lon = update.message.location.longitude
     else:
-        try:
-            lat, lon = map(float, update.message.text.split(","))
-        except (ValueError, AttributeError):
-            return  # Ignore non-location text messages
+        extracted_coords = extract_coordinates_from_text(update.message.text)
+        if extracted_coords:
+            lat, lon = extracted_coords
+        else:
+            return  # Ignore messages without valid coordinates
 
     await update.message.reply_text(
         f"🔍 Hi {user_name}, I have received your request.\n"
@@ -89,14 +100,14 @@ async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.first_name
     await update.message.reply_text(
         f"👋 Hello {user_name}, welcome to the 📡 *5G Tower Locator Bot*!\n"
-        "To check feasibility, send your **live location** or type coordinates as:\n"
+        "To check feasibility, send your **live location**, paste a Google Maps link, or type coordinates as:\n"
         "📍 `latitude,longitude` (e.g., `12.345,67.890`)."
     )
 
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
-    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_message))
+    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'https?://maps\.(google|app)\..+|^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_message))
     print("✅ Bot is running...")
     await app.run_polling()
 
