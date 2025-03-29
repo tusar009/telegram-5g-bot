@@ -53,7 +53,6 @@ def find_nearest_tower(user_lat, user_lon):
 # Handle location or coordinate messages
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.chat.id
-    user_name = update.message.from_user.first_name
 
     if user_id not in ALLOWED_GROUP_ID:
         return
@@ -74,18 +73,14 @@ async def handle_message(update: Update, context: CallbackContext):
     # Store user location
     context.user_data["user_location"] = (lat, lon)
 
-    # Show buttons
+    # Show buttons only (no extra text)
     keyboard = [
         [InlineKeyboardButton("🆕 New Booking Feasibility", callback_data="new_booking")],
         [InlineKeyboardButton("📋 Old Booking Status", callback_data="old_booking")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        f"\U0001F50D Hi {user_name}, I have received your request.\n"
-        f"\U0001F4CD Location: `{lat}, {lon}`\n"
-        f"⏳ Please select an option below:", reply_markup=reply_markup
-    )
+    await update.message.reply_text("Please select an option:", reply_markup=reply_markup)
 
 # Handle button clicks
 async def handle_button_click(update: Update, context: CallbackContext):
@@ -111,22 +106,22 @@ async def handle_button_click(update: Update, context: CallbackContext):
         f"📍 Location: `{lat}, {lon}`\n"
         f"⏳ Please wait while Aatreyee processes your request...\n\n"
         f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
-        f"✅ *User Location*: `{lat}, {lon}`\n"
-        f"📏 *Distance*: {distance_display}\n"
+        f"📏 *Distance from Tower*: {distance_display}\n"
         f"{feasibility_text}\n\n"
-        f"⚡ *Note:* As per policy, the bot calculates feasibility within **500 meters** of a tower."
+        f"⚡ *Note:* Feasibility is calculated within **500 meters** of a tower."
     )
 
-    # Remove buttons
+    # Remove buttons after clicking
     await query.message.edit_reply_markup(reply_markup=None)
 
     if query.data == "new_booking":
         await query.message.reply_text(response_text)
 
     elif query.data == "old_booking":
+        # Show a popup input box for the order ID
         await query.message.reply_text(
-            "📋 *Please enter the last 5 digits of your Order ID:*",
-            reply_markup=ForceReply(selective=True)
+            "📋 Enter the last 5 digits of your Order ID:",
+            reply_markup=ForceReply(input_field_placeholder="Enter 5-digit Order ID")
         )
         context.user_data["waiting_for_order_id"] = True  # Flag for next input
 
@@ -161,10 +156,10 @@ async def process_order_id(update: Update, context: CallbackContext):
         f"📍 Location: `{lat}, {lon}`\n"
         f"⏳ Please wait while Aatreyee processes your request...\n\n"
         f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
-        f"✅ *User Location*: `{lat}, {lon}`\n"
-        f"📏 *Distance*: {distance_display}\n"
+        f"📏 *Distance from Tower*: {distance_display}\n"
         f"{feasibility_text}\n\n"
-        f"⚡ *Note:* As per policy, the bot calculates feasibility within **500 meters** of a tower."
+        f"⚡ *Order ID:* `{order_id}`\n"
+        f"✔ Your booking status has been processed."
     )
 
     await update.message.reply_text(response_text)
