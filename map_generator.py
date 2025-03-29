@@ -3,7 +3,7 @@ import asyncio
 import re
 import requests
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
 from telegram.ext import Application, MessageHandler, CallbackQueryHandler, filters, CallbackContext
 from geopy.distance import geodesic
 from docx import Document
@@ -51,7 +51,7 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# Handle messages (Live Location, Coordinates, Google Maps Links)
+# Handle messages (Live Location, Coordinates)
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.chat.id
     user_name = update.message.from_user.first_name
@@ -75,7 +75,7 @@ async def handle_message(update: Update, context: CallbackContext):
     # Store user location for later use
     context.user_data["user_location"] = (lat, lon)
 
-    # Buttons for user selection
+    # Show buttons again every time user sends a location
     keyboard = [
         [InlineKeyboardButton("🆕 New Booking Feasibility", callback_data="new_booking")],
         [InlineKeyboardButton("📋 Old Booking Status", callback_data="old_booking")]
@@ -123,7 +123,11 @@ async def handle_button_click(update: Update, context: CallbackContext):
         await query.message.reply_text(response_text)
 
     elif query.data == "old_booking":
-        await query.message.reply_text("📋 *Please enter the last 5 digits of your Order ID:*")
+        # Ask for order ID with a **popup dialog box**
+        await query.message.reply_text(
+            "📋 Please enter the last *5 digits* of your Order ID:",
+            reply_markup=ForceReply(selective=True)
+        )
         context.user_data["waiting_for_order_id"] = True  # Flag for next input
 
 # Handle order ID input
@@ -169,12 +173,7 @@ async def process_order_id(update: Update, context: CallbackContext):
 
 # Start command
 async def start(update: Update, context: CallbackContext):
-    user_name = update.message.from_user.first_name
-    await update.message.reply_text(
-        f"\U0001F44B Hello {user_name}, welcome to the \U0001F4E1 *Aatreyee Tower Locator Bot*!\n"
-        "To check feasibility, send your **live location** or type coordinates as:\n"
-        "📍 `latitude,longitude` (e.g., `26.7592595,88.3074051`).\n"
-    )
+    await update.message.reply_text("📡 Send your **live location** or enter coordinates as `latitude,longitude`.")
 
 # Run bot
 async def main():
@@ -182,7 +181,7 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
     app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_message))
     app.add_handler(CallbackQueryHandler(handle_button_click))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_order_id))
+    app.add_handler(MessageHandler(filters.REPLY, process_order_id))
     
     print("✅ Bot is running...")
     await app.run_polling()
