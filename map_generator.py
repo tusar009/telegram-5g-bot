@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+import requests
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
 from telegram.ext import Application, MessageHandler, CallbackQueryHandler, filters, CallbackContext
@@ -50,9 +51,10 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# Handle location or coordinate messages
+# Handle messages (Live Location, Coordinates)
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.chat.id
+    user_name = update.message.from_user.first_name
 
     if user_id not in ALLOWED_GROUP_ID:
         return
@@ -68,19 +70,19 @@ async def handle_message(update: Update, context: CallbackContext):
             lat, lon = map(float, text.split(","))
 
     if lat is None or lon is None:
-        return  # Ignore invalid messages
+        return  # Ignore messages that don't contain valid coordinates
 
-    # Store user location
+    # Store user location for later use
     context.user_data["user_location"] = (lat, lon)
 
-    # Show buttons only (no extra text)
+    # Show buttons
     keyboard = [
         [InlineKeyboardButton("🆕 New Booking Feasibility", callback_data="new_booking")],
         [InlineKeyboardButton("📋 Old Booking Status", callback_data="old_booking")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text("Please select an option:", reply_markup=reply_markup)
+    await update.message.reply_text("📋 *Please select an option:*", reply_markup=reply_markup)
 
 # Handle button clicks
 async def handle_button_click(update: Update, context: CallbackContext):
@@ -93,7 +95,7 @@ async def handle_button_click(update: Update, context: CallbackContext):
         return
 
     if "user_location" not in context.user_data:
-        return  # Ignore if no location
+        return  # Ignore if location is missing
 
     lat, lon = context.user_data["user_location"]
     nearest_tower, distance = find_nearest_tower(lat, lon)
@@ -101,27 +103,22 @@ async def handle_button_click(update: Update, context: CallbackContext):
     distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
     feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
 
-    response_text = (
-        f"🔍 Hi {user_name}, I have received your request.\n"
-        f"📍 Location: `{lat}, {lon}`\n"
-        f"⏳ Please wait while Aatreyee processes your request...\n\n"
-        f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
-        f"📏 *Distance from Tower*: {distance_display}\n"
-        f"{feasibility_text}\n\n"
-        f"⚡ *Note:* Feasibility is calculated within **500 meters** of a tower."
-    )
-
-    # Remove buttons after clicking
-    await query.message.edit_reply_markup(reply_markup=None)
-
     if query.data == "new_booking":
+        response_text = (
+            f"🔍 Hi {user_name}, Aatreyee has received your request.\n"  
+            f"📍 Location: `{lat}, {lon}`\n"  
+            f"📏 *Distance from Tower*: {distance_display}\n"
+            f"{feasibility_text}\n\n"
+            f"⚡ *Note:* As per policy, the bot calculates feasibility within **500 meters** of a tower."
+        )
+        await query.message.delete()
         await query.message.reply_text(response_text)
 
     elif query.data == "old_booking":
-        # Show a popup input box for the order ID
+        await query.message.delete()
         await query.message.reply_text(
-            "📋 Enter the last 5 digits of your Order ID:",
-            reply_markup=ForceReply(input_field_placeholder="Enter 5-digit Order ID")
+            "📋 *Please enter the last 5 digits of your Order ID:*",
+            reply_markup=ForceReply(selective=True)
         )
         context.user_data["waiting_for_order_id"] = True  # Flag for next input
 
@@ -138,12 +135,13 @@ async def process_order_id(update: Update, context: CallbackContext):
         return
 
     if not re.match(r'^\d{5}$', order_id):  # Validate order ID format (must be 5 digits)
-        return  # Ignore invalid inputs
+        await update.message.reply_text("⚠️ Invalid Order ID. Please enter the last *5 digits* of your Order ID.")
+        return
 
     context.user_data["waiting_for_order_id"] = False  # Reset flag
 
     if "user_location" not in context.user_data:
-        return  # Ignore if no location
+        return  # Ignore if location is missing
 
     lat, lon = context.user_data["user_location"]
     nearest_tower, distance = find_nearest_tower(lat, lon)
@@ -152,14 +150,11 @@ async def process_order_id(update: Update, context: CallbackContext):
     feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
 
     response_text = (
-        f"🔍 Hi {user_name}, I have received your request.\n"
-        f"📍 Location: `{lat}, {lon}`\n"
-        f"⏳ Please wait while Aatreyee processes your request...\n\n"
-        f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
-        f"📏 *Distance from Tower*: {distance_display}\n"
+        f"🔍 Hi {user_name}, Aatreyee has received your request.\n"  
+        f"📍 Location: `{lat}, {lon}`\n"  
+        f"📏 *Distance from 5G Tower*: {distance_display}\n"
         f"{feasibility_text}\n\n"
         f"⚡ *Order ID:* `{order_id}`\n"
-        f"✔ Your booking status has been processed."
     )
 
     await update.message.reply_text(response_text)
@@ -175,7 +170,7 @@ async def main():
     app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_message))
     app.add_handler(CallbackQueryHandler(handle_button_click))
     app.add_handler(MessageHandler(filters.REPLY, process_order_id))
-
+    
     print("✅ Bot is running...")
     await app.run_polling()
 
