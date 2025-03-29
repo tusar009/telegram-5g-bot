@@ -3,8 +3,8 @@ import asyncio
 import re
 import requests
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, CallbackContext
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, MessageHandler, CallbackQueryHandler, filters, CallbackContext
 from geopy.distance import geodesic
 from docx import Document
 import nest_asyncio
@@ -51,28 +51,6 @@ def find_nearest_tower(user_lat, user_lon):
             nearest_tower = tower
     return nearest_tower, min_distance
 
-# Expand Google Maps short links
-def expand_google_maps_short_link(short_url):
-    try:
-        response = requests.head(short_url, allow_redirects=True)
-        return response.url  # Get the final expanded URL
-    except requests.RequestException:
-        return None
-
-# Extract coordinates from a Google Maps URL
-def extract_coordinates_from_google_maps(url):
-    expanded_url = expand_google_maps_short_link(url) if "maps.app.goo.gl" in url else url
-    if not expanded_url:
-        return None
-
-    # Match both @lat,lon and ?q=lat,lon formats
-    match = re.search(r'[@](-?\d+\.\d+),(-?\d+\.\d+)|[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)
-    if match:
-        lat, lon = match.group(1) or match.group(3), match.group(2) or match.group(4)
-        return float(lat), float(lon)
-    
-    return None
-
 # Handle messages (Live Location, Coordinates, Google Maps Links)
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.chat.id
@@ -90,32 +68,104 @@ async def handle_message(update: Update, context: CallbackContext):
         text = update.message.text.strip()
         if re.match(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$', text):  # Latitude,Longitude format
             lat, lon = map(float, text.split(","))
-        elif "google.com/maps" in text or "maps.app.goo.gl" in text:  # Google Maps link
-            coords = extract_coordinates_from_google_maps(text)
-            if coords:
-                lat, lon = coords
 
     if lat is None or lon is None:
         return  # Ignore messages that don't contain valid coordinates
 
+    # Store user location for later use
+    context.user_data["user_location"] = (lat, lon)
+
+    # Buttons for user selection
+    keyboard = [
+        [InlineKeyboardButton("🆕 New Booking Feasibility", callback_data="new_booking")],
+        [InlineKeyboardButton("📋 Old Booking Status", callback_data="old_booking")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(
         f"\U0001F50D Hi {user_name}, I have received your request.\n"
         f"\U0001F4CD Location: `{lat}, {lon}`\n"
-        f"⏳ Please wait while Aatreyee processes your request..."
+        f"⏳ Please select an option below:", reply_markup=reply_markup
     )
+
+# Handle button clicks
+async def handle_button_click(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = query.message.chat.id
+    user_name = query.from_user.first_name
+    await query.answer()
+
+    if user_id not in ALLOWED_GROUP_ID:
+        return
+
+    if "user_location" not in context.user_data:
+        await query.message.reply_text("⚠️ Location data missing. Please resend your location.")
+        return
+
+    lat, lon = context.user_data["user_location"]
     nearest_tower, distance = find_nearest_tower(lat, lon)
     distance_meters = distance * 1000
     distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
     feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
 
-    await update.message.reply_text(
-        f"\U0001F4E1 *Aatreyee Tower Locator Bot* \U0001F30D\n"
+    response_text = (
+        f"🔍 Hi {user_name}, I have received your request.\n"
+        f"📍 Location: `{lat}, {lon}`\n"
+        f"⏳ Please wait while Aatreyee processes your request...\n\n"
+        f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
         f"✅ *User Location*: `{lat}, {lon}`\n"
-        f"\U0001F3D7 *Nearest Airtel 5G Tower Location*: `{nearest_tower['latitude']}, {nearest_tower['longitude']}`\n"
-        f"\U0001F4CF *Distance*: {distance_display}\n"
+        f"📏 *Distance*: {distance_display}\n"
         f"{feasibility_text}\n\n"
         f"⚡ *Note:* As per policy, the bot calculates feasibility within **500 meters** of a tower."
     )
+
+    if query.data == "new_booking":
+        await query.message.reply_text(response_text)
+
+    elif query.data == "old_booking":
+        await query.message.reply_text("📋 *Please enter the last 5 digits of your Order ID:*")
+        context.user_data["waiting_for_order_id"] = True  # Flag for next input
+
+# Handle order ID input
+async def process_order_id(update: Update, context: CallbackContext):
+    user_id = update.message.chat.id
+    user_name = update.message.from_user.first_name
+    order_id = update.message.text.strip()
+
+    if user_id not in ALLOWED_GROUP_ID:
+        return
+
+    if "waiting_for_order_id" not in context.user_data or not context.user_data["waiting_for_order_id"]:
+        return
+
+    if not re.match(r'^\d{5}$', order_id):  # Validate order ID format (must be 5 digits)
+        await update.message.reply_text("⚠️ Invalid Order ID. Please enter the last *5 digits* of your Order ID.")
+        return
+
+    context.user_data["waiting_for_order_id"] = False  # Reset flag
+
+    if "user_location" not in context.user_data:
+        await update.message.reply_text("⚠️ Location data missing. Please resend your location.")
+        return
+
+    lat, lon = context.user_data["user_location"]
+    nearest_tower, distance = find_nearest_tower(lat, lon)
+    distance_meters = distance * 1000
+    distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
+    feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
+
+    response_text = (
+        f"🔍 Hi {user_name}, I have received your request.\n"
+        f"📍 Location: `{lat}, {lon}`\n"
+        f"⏳ Please wait while Aatreyee processes your request...\n\n"
+        f"📡 *Aatreyee Tower Locator Bot* 🌍\n"
+        f"✅ *User Location*: `{lat}, {lon}`\n"
+        f"📏 *Distance*: {distance_display}\n"
+        f"{feasibility_text}\n\n"
+        f"⚡ *Note:* As per policy, the bot calculates feasibility within **500 meters** of a tower."
+    )
+
+    await update.message.reply_text(response_text)
 
 # Start command
 async def start(update: Update, context: CallbackContext):
@@ -123,14 +173,17 @@ async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
         f"\U0001F44B Hello {user_name}, welcome to the \U0001F4E1 *Aatreyee Tower Locator Bot*!\n"
         "To check feasibility, send your **live location** or type coordinates as:\n"
-        "📍 `latitude,longitude` (e.g., `12.345,67.890`).\n"
+        "📍 `latitude,longitude` (e.g., `26.7592595,88.3074051`).\n"
     )
 
 # Run bot
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
-    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$') | filters.Regex(r'https://maps\.app\.goo\.gl/.*') | filters.Regex(r'https://www\.google\.com/maps/.*'), handle_message))
+    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$'), handle_message))
+    app.add_handler(CallbackQueryHandler(handle_button_click))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_order_id))
+    
     print("✅ Bot is running...")
     await app.run_polling()
 
