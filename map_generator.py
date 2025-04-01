@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from geopy.distance import geodesic
-from docx import Document
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -27,6 +26,7 @@ def load_tower_data_from_docx(docx_path):
         print(f"❌ ERROR: {docx_path} not found.")
         return []
     
+    from docx import Document
     doc = Document(docx_path)
     towers = []
     for para in doc.paragraphs:
@@ -38,9 +38,26 @@ def load_tower_data_from_docx(docx_path):
     print(f"✅ Loaded {len(towers)} towers from {docx_path}")
     return towers
 
+# Load FTTH Tower data from TXT file
+def load_tower_data_from_txt(txt_path):
+    if not os.path.exists(txt_path):
+        print(f"❌ ERROR: {txt_path} not found.")
+        return []
+
+    towers = []
+    with open(txt_path, 'r') as file:
+        for line in file:
+            match = re.search(r'Latitude:\s*(-?\d+\.\d+),\s*Longitude:\s*(-?\d+\.\d+)', line)
+            if match:
+                lat, lon = float(match.group(1)), float(match.group(2))
+                towers.append({'latitude': lat, 'longitude': lon})
+
+    print(f"✅ Loaded {len(towers)} towers from {txt_path}")
+    return towers
+
 # Load tower data
-tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
-ftth_tower_data = load_tower_data_from_docx("FTTH_Tower_Details.docx")
+tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")  # Assuming 5G data is still in DOCX
+ftth_tower_data = load_tower_data_from_txt("ftth_tower_details.txt")  # Updated to load from TXT
 
 # Debug: Print FTTH towers
 print("Loaded FTTH Towers:")
