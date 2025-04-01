@@ -28,14 +28,17 @@ def load_tower_data_from_docx(docx_path):
     doc = Document(docx_path)
     towers = []
     for para in doc.paragraphs:
-        if para.text.startswith("Name:"):
-            parts = para.text.split(", ")
+        if "Latitude:" in para.text and "Longitude:" in para.text:
             try:
-                lat = float(parts[1].split(": ")[1])
-                lon = float(parts[2].split(": ")[1])
-                towers.append({'latitude': lat, 'longitude': lon})
-            except (IndexError, ValueError):
+                lat_match = re.search(r'Latitude:\s*(-?\d+\.\d+)', para.text)
+                lon_match = re.search(r'Longitude:\s*(-?\d+\.\d+)', para.text)
+                if lat_match and lon_match:
+                    lat = float(lat_match.group(1))
+                    lon = float(lon_match.group(1))
+                    towers.append({'latitude': lat, 'longitude': lon})
+            except ValueError:
                 continue
+    print(f"Loaded {len(towers)} towers from {docx_path}")
     return towers
 
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
@@ -43,6 +46,8 @@ ftth_data = load_tower_data_from_docx("FTTH_Tower_Details.docx")
 
 # Find nearest tower
 def find_nearest_tower(user_lat, user_lon, towers):
+    if not towers:
+        return None, float('inf')
     min_distance = float('inf')
     nearest_tower = None
     for tower in towers:
