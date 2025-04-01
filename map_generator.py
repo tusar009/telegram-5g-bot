@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
 from geopy.distance import geodesic
-from docx import Document
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -16,13 +15,14 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not TELEGRAM_BOT_TOKEN:
-    print("❌ ERROR: Telegram bot token not found.")
+    print("\u274c ERROR: Telegram bot token not found.")
     exit()
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358, -1002693800859}
 
 # Load 5G Tower data from DOCX
 def load_tower_data_from_docx(docx_path):
+    from docx import Document
     if not os.path.exists(docx_path):
         print(f"❌ ERROR: {docx_path} not found.")
         return []
@@ -38,60 +38,37 @@ def load_tower_data_from_docx(docx_path):
     print(f"✅ Loaded {len(towers)} towers from {docx_path}")
     return towers
 
+# Load FTTH Tower data from TXT
+def load_tower_data_from_txt(txt_path):
+    if not os.path.exists(txt_path):
+        print(f"❌ ERROR: {txt_path} not found.")
+        return []
+    
+    towers = []
+    with open(txt_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            match = re.search(r'Latitude:\s*(-?\d+\.\d+),\s*Longitude:\s*(-?\d+\.\d+)', line)
+            if match:
+                lat, lon = float(match.group(1)), float(match.group(2))
+                towers.append({'latitude': lat, 'longitude': lon})
+    
+    print(f"✅ Loaded {len(towers)} towers from {txt_path}")
+    return towers
+
 # Load tower data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
-ftth_tower_data = load_tower_data_from_docx("FTTH_Tower_Details.docx")
-
-# Debug: Print loaded towers
-print("Loaded 5G Towers:")
-for tower in tower_data:
-    print(f"Latitude: {tower['latitude']}, Longitude: {tower['longitude']}")
-
-print("Loaded FTTH Towers:")
-for tower in ftth_tower_data:
-    print(f"Latitude: {tower['latitude']}, Longitude: {tower['longitude']}")
+ftth_tower_data = load_tower_data_from_txt("FTTH_Tower_Details.txt")
 
 # Find nearest tower function
 def find_nearest_tower(user_lat, user_lon, tower_list):
-    if not tower_list:
-        print("❌ ERROR: No towers available for distance calculation!")
-        return None, float('inf')
-
     min_distance = float('inf')
     nearest_tower = None
-
     for tower in tower_list:
-        if 'latitude' in tower and 'longitude' in tower:
-            distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
-            if distance < min_distance:
-                min_distance = distance
-                nearest_tower = tower
-
-    if nearest_tower is None:
-        print("❌ ERROR: No nearest tower found!")
-
+        distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
+        if distance < min_distance:
+            min_distance = distance
+            nearest_tower = tower
     return nearest_tower, min_distance
-
-# Expand Google Maps short links
-def expand_google_maps_short_link(short_url):
-    try:
-        response = requests.head(short_url, allow_redirects=True)
-        return response.url  # Get the final expanded URL
-    except requests.RequestException:
-        return None
-
-# Extract coordinates from a Google Maps URL
-def extract_coordinates_from_google_maps(url):
-    expanded_url = expand_google_maps_short_link(url) if "maps.app.goo.gl" in url else url
-    if not expanded_url:
-        return None
-
-    match = re.search(r'[@](-?\d+\.\d+),(-?\d+\.\d+)|[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)', expanded_url)
-    if match:
-        lat, lon = match.group(1) or match.group(3), match.group(2) or match.group(4)
-        return float(lat), float(lon)
-    
-    return None
 
 # Handle messages (Live Location, Coordinates, Google Maps Links)
 async def handle_message(update: Update, context: CallbackContext):
@@ -102,19 +79,14 @@ async def handle_message(update: Update, context: CallbackContext):
         return
 
     lat, lon = None, None
+    text = update.message.text.strip()
 
     if update.message.location:
         lat = update.message.location.latitude
         lon = update.message.location.longitude
-    else:
-        text = update.message.text.strip()
-        if re.match(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$', text):  # Latitude,Longitude format
-            lat, lon = map(float, text.split(","))
-        elif re.search(r'(?:google\.com/maps|maps\.app\.goo\.gl)', text):  # Google Maps link
-            coords = extract_coordinates_from_google_maps(text)
-            if coords:
-                lat, lon = coords
-
+    elif re.match(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$', text):  # Latitude,Longitude format
+        lat, lon = map(float, text.split(","))
+    
     if lat is None or lon is None:
         return  # Ignore messages that don't contain valid coordinates
 
@@ -122,20 +94,9 @@ async def handle_message(update: Update, context: CallbackContext):
     nearest_5g_tower, distance_5g = find_nearest_tower(lat, lon, tower_data)
     nearest_ftth_tower, distance_ftth = find_nearest_tower(lat, lon, ftth_tower_data)
 
-    # Debugging logs
-    print(f"User Location: {lat}, {lon}")
-    print(f"Nearest 5G Tower: {nearest_5g_tower}")
-    print(f"Nearest FTTH Tower: {nearest_ftth_tower}")
-
     # Convert distances to meters
     distance_5g_meters = distance_5g * 1000 if distance_5g != float('inf') else float('inf')
     distance_ftth_meters = distance_ftth * 1000 if distance_ftth != float('inf') else float('inf')
-
-    # Debugging logs for distance
-    if distance_5g_meters == float('inf'):
-        print("🚨 Error: Distance calculation returned infinity! Check 5G tower coordinates.")
-    if distance_ftth_meters == float('inf'):
-        print("🚨 Error: Distance calculation returned infinity! Check FTTH tower coordinates.")
 
     # Feasibility determination
     af_feasibility = "✅ *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
@@ -147,20 +108,11 @@ async def handle_message(update: Update, context: CallbackContext):
     await update.message.reply_text(
         f"🔍 Hi {user_name}, Aatreyee received your request.\n"
         f"📍 Location: `{lat}, {lon}`\n\n"
-        f"📏 *Distance from Airtel 5G Tower*: {distance_5g_display} ({nearest_5g_tower})\n"
+        f"📏 *Distance from Airtel 5G Tower*: {distance_5g_display} ({nearest_5g_tower if nearest_5g_tower else 'None'})\n"
         f"{af_feasibility}\n\n"
-        f"📏 *Distance from FTTH Box*: {distance_ftth_display} ({nearest_ftth_tower})\n"
+        f"📏 *Distance from FTTH Box*: {distance_ftth_display} ({nearest_ftth_tower if nearest_ftth_tower else 'None'})\n"
         f"{ftth_feasibility}\n\n"
         f"⚡ *Note:* Feasibility is calculated within **500 meters** for Air-Fiber and **150 meters** for FTTH."
-    )
-
-# Start command
-async def start(update: Update, context: CallbackContext):
-    user_name = update.message.from_user.first_name
-    await update.message.reply_text(
-        f"👋 Hello {user_name}, welcome to the 📡 *Aatreyee Tower Locator Bot*!\n"
-        "To check feasibility, send your **live location** or type coordinates as:\n"
-        "📍 latitude,longitude (e.g., 12.345,67.890).\n"
     )
 
 # Run bot
