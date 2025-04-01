@@ -21,7 +21,7 @@ if not TELEGRAM_BOT_TOKEN:
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358, -1002693800859}
 
-# Load 5G Tower data from DOCX
+# Load tower data from DOCX
 def load_tower_data_from_docx(docx_path):
     if not os.path.exists(docx_path):
         return []
@@ -39,12 +39,13 @@ def load_tower_data_from_docx(docx_path):
     return towers
 
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
+ftth_data = load_tower_data_from_docx("FTTH_Tower_Details.docx")
 
 # Find nearest tower
-def find_nearest_tower(user_lat, user_lon):
+def find_nearest_tower(user_lat, user_lon, towers):
     min_distance = float('inf')
     nearest_tower = None
-    for tower in tower_data:
+    for tower in towers:
         distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
         if distance < min_distance:
             min_distance = distance
@@ -97,17 +98,22 @@ async def handle_message(update: Update, context: CallbackContext):
     if lat is None or lon is None:
         return  # Ignore messages that don't contain valid coordinates
 
-    nearest_tower, distance = find_nearest_tower(lat, lon)
-    distance_meters = distance * 1000
-    distance_display = f"{distance_meters:.0f} m" if distance_meters < 1000 else f"{distance:.2f} km"
-    feasibility_text = "✅ *Air-Fiber Feasible!*" if distance_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
+    nearest_5g, distance_5g = find_nearest_tower(lat, lon, tower_data)
+    distance_5g_meters = distance_5g * 1000
+    feasibility_5g = "✅ *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
+
+    nearest_ftth, distance_ftth = find_nearest_tower(lat, lon, ftth_data)
+    distance_ftth_meters = distance_ftth * 1000
+    feasibility_ftth = "✅ *FTTH Feasible!*" if distance_ftth_meters < 150 else "❌ *FTTH Not Feasible!*"
 
     await update.message.reply_text(
         f"🔍 Hi {user_name}, Aatreyee received your request.\n"
         f"📍 Location: `{lat}, {lon}`\n\n"
-        f"📏 *Distance from Airtel 5G Tower*: {distance_display}\n"
-        f"{feasibility_text}\n\n"
-        f"⚡ *Note:* Feasibility is calculated within **500 meters** of a tower."
+        f"📏 *Distance from Airtel 5G Tower*: {distance_5g_meters:.0f} m ({distance_5g:.2f} km)\n"
+        f"{feasibility_5g}\n\n"
+        f"📏 *Distance from FTTH Tower*: {distance_ftth_meters:.0f} m ({distance_ftth:.2f} km)\n"
+        f"{feasibility_ftth}\n\n"
+        f"⚡ *Note:*\n- Air-Fiber feasibility is within **500 meters**.\n- FTTH feasibility is within **150 meters**."
     )
 
 # Start command
