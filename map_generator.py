@@ -21,28 +21,47 @@ if not TELEGRAM_BOT_TOKEN:
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358, -1002693800859}
 
-# Load tower data from DOCX
+# Load 5G Tower data from DOCX
 def load_tower_data_from_docx(docx_path):
     if not os.path.exists(docx_path):
         return []
     doc = Document(docx_path)
     towers = []
     for para in doc.paragraphs:
-        if "Latitude:" in para.text and "Longitude:" in para.text:
+        if para.text.startswith("Name:"):
+            parts = para.text.split(", ")
             try:
-                lat_match = re.search(r'Latitude:\s*(-?\d+\.\d+)', para.text)
-                lon_match = re.search(r'Longitude:\s*(-?\d+\.\d+)', para.text)
-                if lat_match and lon_match:
-                    lat = float(lat_match.group(1))
-                    lon = float(lon_match.group(1))
-                    towers.append({'latitude': lat, 'longitude': lon})
-            except ValueError:
+                lat = float(parts[1].split(": ")[1])
+                lon = float(parts[2].split(": ")[1])
+                towers.append({'latitude': lat, 'longitude': lon})
+            except (IndexError, ValueError):
                 continue
-    print(f"Loaded {len(towers)} towers from {docx_path}")
     return towers
 
+# Load FTTH Tower data from DOCX
+def load_ftth_tower_data_from_docx(docx_path):
+    if not os.path.exists(docx_path):
+        return []
+    doc = Document(docx_path)
+    towers = []
+    for para in doc.paragraphs:
+        # Directly looking for lat/long pairs in the document
+        lat_match = re.search(r'Latitude:\s*(-?\d+\.\d+)', para.text)
+        lon_match = re.search(r'Longitude:\s*(-?\d+\.\d+)', para.text)
+        
+        if lat_match and lon_match:
+            try:
+                lat = float(lat_match.group(1))
+                lon = float(lon_match.group(1))
+                towers.append({'latitude': lat, 'longitude': lon})
+            except ValueError:
+                continue  # Handle any conversion errors
+    print(f"Loaded {len(towers)} FTTH towers.")  # Debugging line
+    return towers
+
+# Load tower data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
-ftth_data = load_tower_data_from_docx("FTTH_Tower_Details.docx")
+ftth_data = load_ftth_tower_data_from_docx("FTTH_Tower_Details.docx")
 
 # Find nearest tower
 def find_nearest_tower(user_lat, user_lon, towers):
@@ -52,6 +71,7 @@ def find_nearest_tower(user_lat, user_lon, towers):
     nearest_tower = None
     for tower in towers:
         distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
+        print(f"Checking tower: {tower}, Distance: {distance} km")  # Debugging line
         if distance < min_distance:
             min_distance = distance
             nearest_tower = tower
@@ -103,10 +123,12 @@ async def handle_message(update: Update, context: CallbackContext):
     if lat is None or lon is None:
         return  # Ignore messages that don't contain valid coordinates
 
+    # Find nearest 5G tower
     nearest_5g, distance_5g = find_nearest_tower(lat, lon, tower_data)
     distance_5g_meters = distance_5g * 1000
     feasibility_5g = "✅ *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
 
+    # Find nearest FTTH tower
     nearest_ftth, distance_ftth = find_nearest_tower(lat, lon, ftth_data)
     distance_ftth_meters = distance_ftth * 1000
     feasibility_ftth = "✅ *FTTH Feasible!*" if distance_ftth_meters < 150 else "❌ *FTTH Not Feasible!*"
@@ -118,7 +140,7 @@ async def handle_message(update: Update, context: CallbackContext):
         f"{feasibility_5g}\n\n"
         f"📏 *Distance from FTTH Box*: {distance_ftth_meters:.0f} m ({distance_ftth:.2f} km)\n"
         f"{feasibility_ftth}\n\n"
-        f"⚡ *Note:*\n- Air-Fiber feasibility is within **500 meters**.\n- FTTH feasibility is within **150 meters**."
+        f"⚡ *Note:* Feasibility is calculated within **500 meters** for Air-Fiber and **150 meters** for FTTH."
     )
 
 # Start command
