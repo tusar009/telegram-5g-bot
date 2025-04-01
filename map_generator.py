@@ -111,7 +111,7 @@ async def handle_message(update: Update, context: CallbackContext):
         f"📍 Location: `{lat}, {lon}`\n\n"
         f"📏 *Distance from Airtel 5G Tower*: {distance_5g_meters:.0f} m ({distance_5g:.2f} km)\n"
         f"{feasibility_5g}\n\n"
-        f"📏 *Distance from FTTH Tower*: {distance_ftth_meters:.0f} m ({distance_ftth:.2f} km)\n"
+        f"📏 *Distance from FTTH Box*: {distance_ftth_meters:.0f} m ({distance_ftth:.2f} km)\n"
         f"{feasibility_ftth}\n\n"
         f"⚡ *Note:*\n- Air-Fiber feasibility is within **500 meters**.\n- FTTH feasibility is within **150 meters**."
     )
