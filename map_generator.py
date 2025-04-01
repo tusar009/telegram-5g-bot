@@ -24,54 +24,35 @@ ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1
 # Load 5G Tower data from DOCX
 def load_tower_data_from_docx(docx_path):
     if not os.path.exists(docx_path):
+        print(f"❌ ERROR: {docx_path} not found.")
         return []
+    
     doc = Document(docx_path)
     towers = []
     for para in doc.paragraphs:
-        if para.text.startswith("Name:"):
-            parts = para.text.split(", ")
-            try:
-                lat = float(parts[1].split(": ")[1])
-                lon = float(parts[2].split(": ")[1])
-                towers.append({'latitude': lat, 'longitude': lon})
-            except (IndexError, ValueError):
-                continue
-    return towers
-
-# Load FTTH Tower data from DOCX
-def load_ftth_tower_data_from_docx(docx_path):
-    if not os.path.exists(docx_path):
-        return []
-    doc = Document(docx_path)
-    towers = []
-    for para in doc.paragraphs:
-        # Directly looking for lat/long pairs in the document
-        lat_match = re.search(r'Latitude:\s*(-?\d+\.\d+)', para.text)
-        lon_match = re.search(r'Longitude:\s*(-?\d+\.\d+)', para.text)
-        
-        if lat_match and lon_match:
-            try:
-                lat = float(lat_match.group(1))
-                lon = float(lon_match.group(1))
-                towers.append({'latitude': lat, 'longitude': lon})
-            except ValueError:
-                continue  # Handle any conversion errors
-    print(f"Loaded {len(towers)} FTTH towers.")  # Debugging line
+        match = re.search(r'Latitude:\s*(-?\d+\.\d+),\s*Longitude:\s*(-?\d+\.\d+)', para.text)
+        if match:
+            lat, lon = float(match.group(1)), float(match.group(2))
+            towers.append({'latitude': lat, 'longitude': lon})
+    
+    print(f"✅ Loaded {len(towers)} towers from {docx_path}")
     return towers
 
 # Load tower data
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
-ftth_data = load_ftth_tower_data_from_docx("FTTH_Tower_Details.docx")
+ftth_tower_data = load_tower_data_from_docx("FTTH_Tower_Details.docx")
 
-# Find nearest tower
-def find_nearest_tower(user_lat, user_lon, towers):
-    if not towers:
-        return None, float('inf')
+# Debug: Print FTTH towers
+print("Loaded FTTH Towers:")
+for tower in ftth_tower_data:
+    print(f"Latitude: {tower['latitude']}, Longitude: {tower['longitude']}")
+
+# Find nearest tower function
+def find_nearest_tower(user_lat, user_lon, tower_list):
     min_distance = float('inf')
     nearest_tower = None
-    for tower in towers:
+    for tower in tower_list:
         distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
-        print(f"Checking tower: {tower}, Distance: {distance} km")  # Debugging line
         if distance < min_distance:
             min_distance = distance
             nearest_tower = tower
@@ -123,23 +104,37 @@ async def handle_message(update: Update, context: CallbackContext):
     if lat is None or lon is None:
         return  # Ignore messages that don't contain valid coordinates
 
-    # Find nearest 5G tower
-    nearest_5g, distance_5g = find_nearest_tower(lat, lon, tower_data)
-    distance_5g_meters = distance_5g * 1000
-    feasibility_5g = "✅ *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
+    # Find nearest towers
+    nearest_5g_tower, distance_5g = find_nearest_tower(lat, lon, tower_data)
+    nearest_ftth_tower, distance_ftth = find_nearest_tower(lat, lon, ftth_tower_data)
 
-    # Find nearest FTTH tower
-    nearest_ftth, distance_ftth = find_nearest_tower(lat, lon, ftth_data)
-    distance_ftth_meters = distance_ftth * 1000
-    feasibility_ftth = "✅ *FTTH Feasible!*" if distance_ftth_meters < 150 else "❌ *FTTH Not Feasible!*"
+    # Debugging logs
+    print(f"User Location: {lat}, {lon}")
+    print(f"Nearest 5G Tower: {nearest_5g_tower}")
+    print(f"Nearest FTTH Tower: {nearest_ftth_tower}")
+
+    # Convert distances to meters
+    distance_5g_meters = distance_5g * 1000 if distance_5g != float('inf') else float('inf')
+    distance_ftth_meters = distance_ftth * 1000 if distance_ftth != float('inf') else float('inf')
+
+    # Debugging logs for distance
+    if distance_ftth_meters == float('inf'):
+        print("🚨 Error: Distance calculation returned infinity! Check FTTH tower coordinates.")
+
+    # Feasibility determination
+    af_feasibility = "✅ *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
+    ftth_feasibility = "✅ *FTTH Feasible!*" if distance_ftth_meters < 150 else "❌ *FTTH Not Feasible!*"
+
+    distance_5g_display = f"{distance_5g_meters:.0f} m" if distance_5g_meters < 1000 else f"{distance_5g:.2f} km"
+    distance_ftth_display = f"{distance_ftth_meters:.0f} m" if distance_ftth_meters < 1000 else f"{distance_ftth:.2f} km"
 
     await update.message.reply_text(
         f"🔍 Hi {user_name}, Aatreyee received your request.\n"
         f"📍 Location: `{lat}, {lon}`\n\n"
-        f"📏 *Distance from Airtel 5G Tower*: {distance_5g_meters:.0f} m ({distance_5g:.2f} km)\n"
-        f"{feasibility_5g}\n\n"
-        f"📏 *Distance from FTTH Box*: {distance_ftth_meters:.0f} m ({distance_ftth:.2f} km)\n"
-        f"{feasibility_ftth}\n\n"
+        f"📏 *Distance from Airtel 5G Tower*: {distance_5g_display}\n"
+        f"{af_feasibility}\n\n"
+        f"📏 *Distance from FTTH Box*: {distance_ftth_display}\n"
+        f"{ftth_feasibility}\n\n"
         f"⚡ *Note:* Feasibility is calculated within **500 meters** for Air-Fiber and **150 meters** for FTTH."
     )
 
@@ -155,8 +150,7 @@ async def start(update: Update, context: CallbackContext):
 # Run bot
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & filters.Command("start"), start))
-    app.add_handler(MessageHandler(filters.LOCATION | filters.Regex(r'^-?\d{1,3}\.\d+,-?\d{1,3}\.\d+$') | filters.Regex(r'(?:google\.com/maps|maps\.app\.goo\.gl)'), handle_message))
+    app.add_handler(MessageHandler(filters.LOCATION | filters.TEXT, handle_message))
     print("✅ Bot is running...")
     await app.run_polling()
 
