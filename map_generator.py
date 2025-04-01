@@ -20,26 +20,9 @@ if not TELEGRAM_BOT_TOKEN:
 
 # Define group IDs for different messages
 FULL_MESSAGE_GROUPS = {-1002341717383}
-SHORT_MESSAGE_GROUPS = {-1002448933343, -1002506198358, -1002693800859}
+SHORT_MESSAGE_GROUPS = {-4767087972, -4667699247, -1002448933343, -1002506198358, -1002693800859}
 
-# Load 5G Tower data from DOCX
-def load_tower_data_from_docx(docx_path):
-    if not os.path.exists(docx_path):
-        print(f"❌ ERROR: {docx_path} not found.")
-        return []
-    
-    towers = []
-    with open(docx_path, "r", encoding="utf-8") as file:
-        for line in file:
-            match = re.search(r'Latitude:\s*(-?\d+\.\d+),\s*Longitude:\s*(-?\d+\.\d+)', line)
-            if match:
-                lat, lon = float(match.group(1)), float(match.group(2))
-                towers.append({'latitude': lat, 'longitude': lon})
-    
-    print(f"✅ Loaded {len(towers)} towers from {docx_path}")
-    return towers
-
-# Load FTTH Tower data from TXT
+# Load 5G Tower data from TXT
 def load_tower_data_from_txt(txt_path):
     if not os.path.exists(txt_path):
         print(f"❌ ERROR: {txt_path} not found.")
@@ -53,11 +36,11 @@ def load_tower_data_from_txt(txt_path):
                 lat, lon = float(match.group(1)), float(match.group(2))
                 towers.append({'latitude': lat, 'longitude': lon})
     
-    print(f"✅ Loaded {len(towers)} FTTH towers from {txt_path}")
+    print(f"✅ Loaded {len(towers)} towers from {txt_path}")
     return towers
 
 # Load tower data
-tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
+tower_data = load_tower_data_from_txt("5G_Tower_Details.txt")
 ftth_tower_data = load_tower_data_from_txt("FTTH_Tower_Details.txt")
 
 # Find nearest tower function
