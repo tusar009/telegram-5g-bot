@@ -20,7 +20,7 @@ if not TELEGRAM_BOT_TOKEN:
 
 ALLOWED_GROUP_ID = {-1002341717383, -4767087972, -4667699247, -1002448933343, -1002506198358, -1002693800859}
 
-# Load FTTH Tower data from TXT file (latitude, longitude only)
+# Load Airtel 5G Tower data from TXT file (latitude, longitude only)
 def load_tower_data_from_txt(txt_path):
     if not os.path.exists(txt_path):
         print(f"❌ ERROR: {txt_path} not found.")
@@ -37,11 +37,12 @@ def load_tower_data_from_txt(txt_path):
             else:
                 print(f"Skipped line (no match): {line.strip()}")  # Debugging output for non-matching lines
 
-    print(f"✅ Loaded {len(towers)} FTTH towers from {txt_path}")
+    print(f"✅ Loaded {len(towers)} towers from {txt_path}")
     return towers
 
-# Load FTTH tower data from file
+# Load FTTH and 5G tower data from files
 ftth_tower_data = load_tower_data_from_txt("FTTH_Tower_Details.txt")
+airtel_5g_tower_data = load_tower_data_from_txt("Airtel_5G_Tower_Details.txt")
 
 # Find nearest tower function with debug logs
 def find_nearest_tower(user_lat, user_lon, tower_list):
@@ -104,27 +105,33 @@ async def handle_message(update: Update, context: CallbackContext):
     # Find nearest FTTH tower
     nearest_ftth_tower, distance_ftth = find_nearest_tower(lat, lon, ftth_tower_data)
 
+    # Find nearest 5G tower
+    nearest_5g_tower, distance_5g = find_nearest_tower(lat, lon, airtel_5g_tower_data)
+
     # Debugging logs
     print(f"User Location: {lat}, {lon}")
+    print(f"Nearest 5G Tower: {nearest_5g_tower}")
     print(f"Nearest FTTH Tower: {nearest_ftth_tower}")
 
     # Convert distances to meters
+    distance_5g_meters = distance_5g * 1000 if distance_5g != float('inf') else float('inf')
     distance_ftth_meters = distance_ftth * 1000 if distance_ftth != float('inf') else float('inf')
 
-    # Debugging logs for distance
-    if distance_ftth_meters == float('inf'):
-        print("🚨 Error: Distance calculation returned infinity! Check FTTH tower coordinates.")
-
-    # Feasibility determination for FTTH
+    # Feasibility determination for 5G and FTTH
+    af_feasibility = "✅ *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "❌ *Air-Fiber Not Feasible!*"
     ftth_feasibility = "✅ *FTTH Feasible!*" if distance_ftth_meters < 150 else "❌ *FTTH Not Feasible!*"
+
+    distance_5g_display = f"{distance_5g_meters:.0f} m" if distance_5g_meters < 1000 else f"{distance_5g:.2f} km"
     distance_ftth_display = f"{distance_ftth_meters:.0f} m" if distance_ftth_meters < 1000 else f"{distance_ftth:.2f} km"
 
     await update.message.reply_text(
         f"🔍 Hi {user_name}, Aatreyee received your request.\n"
         f"📍 Location: `{lat}, {lon}`\n\n"
+        f"📏 *Distance from Airtel 5G Tower*: {distance_5g_display}\n"
+        f"{af_feasibility}\n\n"
         f"📏 *Distance from FTTH Box*: {distance_ftth_display}\n"
         f"{ftth_feasibility}\n\n"
-        f"⚡ *Note:* Feasibility is calculated within **150 meters** for FTTH."
+        f"⚡ *Note:* Feasibility is calculated within **500 meters** for Air-Fiber and **150 meters** for FTTH."
     )
 
 # Start command
