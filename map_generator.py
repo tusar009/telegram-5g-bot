@@ -22,7 +22,7 @@ if not TELEGRAM_BOT_TOKEN:
 FULL_MESSAGE_GROUPS = {-1002341717383}
 SHORT_MESSAGE_GROUPS = {-4767087972, -4667699247, -1002448933343, -1002506198358, -1002693800859}
 
-# Load 5G Tower data from TXT
+# Load tower data from TXT
 def load_tower_data_from_txt(txt_path):
     if not os.path.exists(txt_path):
         print(f"❌ ERROR: {txt_path} not found.")
