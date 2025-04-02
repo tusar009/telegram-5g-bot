@@ -2,7 +2,6 @@ import os
 import asyncio
 import re
 import requests
-import openrouteservice
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, CallbackContext
@@ -15,13 +14,10 @@ nest_asyncio.apply()
 # Load environment variables
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-ORS_API_KEY = os.getenv("ORS_API_KEY")  # OpenRouteService API key
 
 if not TELEGRAM_BOT_TOKEN:
     print("\u274c ERROR: Telegram bot token not found.")
     exit()
-
-ors_client = openrouteservice.Client(key=ORS_API_KEY) if ORS_API_KEY else None
 
 # Define group IDs
 DETAILED_GROUP_ID = -1002341717383
@@ -66,32 +62,12 @@ def load_tower_data_from_txt(txt_path):
 tower_data = load_tower_data_from_docx("5G_Tower_Details.docx")
 ftth_tower_data = load_tower_data_from_txt("FTTH_Tower_Details.txt")
 
-# Get road distance for FTTH using OpenRouteService
-def get_road_distance(origin, destination):
-    if not ors_client:
-        print("❌ ERROR: OpenRouteService API key not found.")
-        return float('inf')
-    
-    try:
-        route = ors_client.directions(
-            coordinates=[origin, destination],
-            profile='foot-walking',  # FTTH follows electricity poles along roads
-            format='geojson'
-        )
-        return route['features'][0]['properties']['segments'][0]['distance'] / 1000  # Convert meters to km
-    except Exception as e:
-        print(f"❌ Error getting road distance: {e}")
-        return float('inf')
-
 # Find nearest tower function
-def find_nearest_tower(user_lat, user_lon, tower_list, use_road_distance=False):
+def find_nearest_tower(user_lat, user_lon, tower_list):
     min_distance = float('inf')
     nearest_tower = None
     for tower in tower_list:
-        if use_road_distance:
-            distance = get_road_distance((user_lon, user_lat), (tower['longitude'], tower['latitude']))
-        else:
-            distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
+        distance = geodesic((user_lat, user_lon), (tower['latitude'], tower['longitude'])).kilometers
         if distance < min_distance:
             min_distance = distance
             nearest_tower = tower
@@ -121,11 +97,8 @@ async def handle_message(update: Update, context: CallbackContext):
     if lat is None or lon is None:
         return  # Ignore messages without valid coordinates
 
-    # Air-Fiber: Geodesic distance (straight line)
     nearest_5g_tower, distance_5g = find_nearest_tower(lat, lon, tower_data)
-
-    # FTTH: Road distance (following electricity poles)
-    nearest_ftth_tower, distance_ftth = find_nearest_tower(lat, lon, ftth_tower_data, use_road_distance=True)
+    nearest_ftth_tower, distance_ftth = find_nearest_tower(lat, lon, ftth_tower_data)
 
     distance_5g_display = f"{distance_5g * 1000:.0f} m" if distance_5g < 1 else f"{distance_5g:.2f} km"
     distance_ftth_display = f"{distance_ftth * 1000:.0f} m" if distance_ftth < 1 else f"{distance_ftth:.2f} km"
@@ -139,11 +112,11 @@ async def handle_message(update: Update, context: CallbackContext):
             f"\U0001F4CD Location: `{lat}, {lon}`\n\n"
             f"\U0001F4CF *Distance from Airtel 5G Tower*: {distance_5g_display}\n"
             f"{af_feasibility}\n\n"
-            f"\U0001F4CF *Distance from FTTH Box (by road)*: {distance_ftth_display}\n"
+            f"\U0001F4CF *Distance from FTTH Box*: {distance_ftth_display}\n"
             f"{ftth_feasibility}\n\n"
             f"⚡ *Note:* Feasibility is calculated within **500 meters** for Air-Fiber and **150 meters** for FTTH."
         )
-    elif group_id in SUMMARY_GROUP_ID:
+    elif group_id in SUMMARY_GROUP_ID:  # Fixed condition
         message = (
             f"\U0001F50D Hi {user_name}, Aatreyee received your request.\n"
             f"\U0001F4CD Location: `{lat}, {lon}`\n\n"
