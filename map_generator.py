@@ -21,7 +21,8 @@ if not TELEGRAM_BOT_TOKEN:
 
 # Define group IDs
 DETAILED_GROUP_ID = -1002341717383
-SUMMARY_GROUP_ID = -1002448933343, -1002506198358, -1002693800859  # Replace with actual second group ID
+SUMMARY_GROUP_ID =[-1002448933343, -1002506198358, -1002693800859]  # Use a list instead
+  # Replace with actual second group ID
 
 # Load 5G Tower data from DOCX
 def load_tower_data_from_docx(docx_path):
