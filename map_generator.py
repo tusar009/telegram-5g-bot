@@ -21,8 +21,7 @@ if not TELEGRAM_BOT_TOKEN:
 
 # Define group IDs
 DETAILED_GROUP_ID = -1002341717383
-SUMMARY_GROUP_ID =[-1002448933343, -1002506198358, -1002693800859]  # Use a list instead
-  # Replace with actual second group ID
+SUMMARY_GROUP_ID = [-1002448933343, -1002506198358, -1002693800859]  # Use a list
 
 # Load 5G Tower data from DOCX
 def load_tower_data_from_docx(docx_path):
@@ -101,26 +100,23 @@ async def handle_message(update: Update, context: CallbackContext):
     nearest_5g_tower, distance_5g = find_nearest_tower(lat, lon, tower_data)
     nearest_ftth_tower, distance_ftth = find_nearest_tower(lat, lon, ftth_tower_data)
 
-    distance_5g_meters = distance_5g * 1000 if distance_5g != float('inf') else float('inf')
-    distance_ftth_meters = distance_ftth * 1000 if distance_ftth != float('inf') else float('inf')
+    distance_5g_display = f"{distance_5g * 1000:.0f} m" if distance_5g < 1 else f"{distance_5g:.2f} km"
+    distance_ftth_display = f"{distance_ftth * 1000:.0f} m" if distance_ftth < 1 else f"{distance_ftth:.2f} km"
 
-    af_feasibility = "\u2705 *Air-Fiber Feasible!*" if distance_5g_meters < 500 else "\u274c *Air-Fiber Not Feasible!*"
-    ftth_feasibility = "\u2705 *FTTH Feasible!*" if distance_ftth_meters < 150 else "\u274c *FTTH Not Feasible!*"
-
-    distance_5g_display = f"{distance_5g_meters:.0f} m" if distance_5g_meters < 1000 else f"{distance_5g:.2f} km"
-    distance_ftth_display = f"{distance_ftth_meters:.0f} m" if distance_ftth_meters < 1000 else f"{distance_ftth:.2f} km"
+    af_feasibility = "\u2705 *Air-Fiber Feasible!*" if distance_5g * 1000 < 500 else "\u274c *Air-Fiber Not Feasible!*"
+    ftth_feasibility = "\u2705 *FTTH Feasible!*" if distance_ftth * 1000 < 150 else "\u274c *FTTH Not Feasible!*"
 
     if group_id == DETAILED_GROUP_ID:
         message = (
             f"\U0001F50D Hi {user_name}, Aatreyee received your request.\n"
             f"\U0001F4CD Location: `{lat}, {lon}`\n\n"
-            f"\U0001F4CF *Distance from Airtel 5G Tower*: {distance_5g_display} ({nearest_5g_tower})\n"
+            f"\U0001F4CF *Distance from Airtel 5G Tower*: {distance_5g_display}\n"
             f"{af_feasibility}\n\n"
-            f"\U0001F4CF *Distance from FTTH Box*: {distance_ftth_display} ({nearest_ftth_tower})\n"
+            f"\U0001F4CF *Distance from FTTH Box*: {distance_ftth_display}\n"
             f"{ftth_feasibility}\n\n"
             f"⚡ *Note:* Feasibility is calculated within **500 meters** for Air-Fiber and **150 meters** for FTTH."
         )
-    elif group_id == SUMMARY_GROUP_ID:
+    elif group_id in SUMMARY_GROUP_ID:  # Fixed condition
         message = (
             f"\U0001F50D Hi {user_name}, Aatreyee received your request.\n"
             f"\U0001F4CD Location: `{lat}, {lon}`\n\n"
