@@ -122,7 +122,7 @@ async def handle_message(update: Update, context: CallbackContext):
             f"\U0001F4CD Location: `{lat}, {lon}`\n\n"
             f"\U0001F4CF *Distance from Airtel 5G Tower*: {distance_5g_display}\n"
             f"{af_feasibility}\n\n"
-            f"⚡ *As per Policy:* Feasibility is calculated within **500 meters** of a tower(Also Live For FTTH Distance Checking And Others Option Need Any Support To Contact Aatreyee)."
+            f"⚡ *As per Policy:* Feasibility is calculated within **500 meters** of a tower."
         )
     else:
         return
